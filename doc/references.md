@@ -24,4 +24,10 @@
  * YahooのYahoo! Finance APIを利用して株価を取得する | なんじゃもんじゃ
    
    https://nanjamonja.net/archives/1257
+
+ * 再編成した東証市場のプライム等区分別銘柄一覧の取得 - Qiita
+  
+   銘柄コードの取得のために参考にした。
+
+   https://qiita.com/higebobo/items/0ec7e243c79c0b5488bb
   
