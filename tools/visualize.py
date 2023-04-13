@@ -21,7 +21,7 @@ def main():
     x = np.arange(df_real['day from 5 years ago'].iloc[0], df_real['day from 5 years ago'].iloc[-1] + 10 + 1, 1)
     for index, item in df_learn.iterrows():
         y_hat = item['pipeline'].predict(x.reshape(-1, 1))
-        df_estimate = pd.DataFrame({'close':pd.Series(y_hat), 'day from 5 years ago':pd.Series(x), 'real/estimate':item['model name']})
+        df_estimate = pd.DataFrame({'close':pd.Series(y_hat), 'day from 5 years ago':pd.Series(x), 'real/model':item['model name']})
         df_real=pd.concat([df_real, df_estimate])
 
     fig = px.line(df_real, x='day from 5 years ago', y='close', color='real/model')

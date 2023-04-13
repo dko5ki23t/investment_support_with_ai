@@ -9,6 +9,7 @@ from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.pipeline import make_pipeline
 import argparse         # コマンドライン引数チェック用
+from pathlib import Path
 
 # 目的変数を作成する
 def kabuka(code, year, day):
@@ -29,10 +30,6 @@ def kabuka(code, year, day):
     df_base = pd.DataFrame(symbol_data.values(), index=symbol_data.keys()).T
     df_base.timestamp = pd.to_datetime(df_base.timestamp, unit='ms')
     df_base.index = pd.DatetimeIndex(df_base.timestamp, name='timestamp').tz_localize('UTC').tz_convert('Asia/Tokyo')
-    #df_base = df_base.drop(['timestamp', 'open', 'high', 'low', 'volume'], axis=1)
-    
-    #df_base = df_base.rename(columns={'close':company_code + '対象'})
-    #df_base = df_base[:-1] #一番最後の行を削除
     df_base = df_base.reset_index(drop=True)
     
     
@@ -41,6 +38,7 @@ def kabuka(code, year, day):
 def set_argparse():
     parser = argparse.ArgumentParser(description='TODO')
     parser.add_argument('filename', help='name of file with stock code info')
+    parser.add_argument('out_dir', help='株価データ保存先')
     args = parser.parse_args()
     return args
 
@@ -49,15 +47,18 @@ def main():
     # ファイル読み込み
     df = pd.read_csv(args.filename)
     # データ取得&バイナリにして保存
+    # ディレクトリがない場合は作成
+    dir = Path(args.out_dir)
+    dir.mkdir(parents=True, exist_ok=True)
     for index, item in df.iterrows():
         ret = kabuka(item['code'], 5, 1)    # 5年前まで、1日ごとに取得
         stock_df = ret[1]
         stock_df['day from 5 years ago'] = range(0, len(stock_df))
-        stock_df['real/estimate'] = 'real'
+        stock_df['real/model'] = 'real'
         stock_df['code'] = item['code']
         stock_df['stock name'] = item['name']
-        #stock_df = stock_df.drop(['timestamp', 'open', 'high', 'low', 'volume'], axis=1)
-        stock_df.to_pickle('fetched_data/' + str(item['code']) + '.pkl')
+        stock_df.to_pickle(str(args.out_dir) + '/' + str(item['code']) + '.pkl')
+        # TODO:ログ保存
 
 if __name__ == "__main__":
     main()

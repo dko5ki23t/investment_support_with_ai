@@ -5,6 +5,14 @@
 
    https://chokkan.github.io/mlnote/index.html
 
+ * LSTMで株価予測入門 [Python,Keras] | スーパーソフトウエア東京
+
+   https://supersoftware.jp/tech/20220907/17599/
+
+ * 【完全版】TensorFlowのインストール方法〜コマンド1発 - DeepAge
+
+   https://deepage.net/tensorflow/2017/01/17/how-to-install-tensorflow.html
+
 ### 株価データ取得
  * 株情報を取得するAPIどれが良い - Qiita
 

@@ -34,7 +34,7 @@ def main():
         # 次の日～n日後の値推定(TODO:全日はいらない？)
         x = np.arange(df.loc[min_idx]['last_day'] + 1, df.loc[min_idx]['last_day'] + int(args.term) + 1, 1)
         predict_val = model_pipeline.predict(x.reshape(-1, 1))[-1]
-        # 現在の株価取得(TODO:最新とは言えなさそう？)
+        # 現在の株価取得(TODO:最新とは言えなさそう？ & 値がnanになることあり)
         company_code = str(df['code'].iloc[0]) + '.T'
         my_share = share.Share(company_code)
         symbol_data = None
@@ -47,6 +47,9 @@ def main():
         except YahooFinanceError as e:
             print(e.message)
             sys.exit(1)
+        # symbol_dataがNoneの場合あり。それは無視する
+        if symbol_data is None:
+            continue
         df_now = pd.DataFrame(symbol_data.values(), index=symbol_data.keys()).T
         print('now:' + str(df_now['close'].iloc[-1]) + ' predict:' + str(predict_val))
         
