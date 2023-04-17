@@ -1,8 +1,29 @@
 import argparse         # コマンドライン引数チェック用
 import pandas as pd
-import glob
 import numpy as np
 import plotly.express as px
+from sklearn.preprocessing import MinMaxScaler
+import logging
+from pathlib import Path
+
+# ログ設定
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+formatter = logging.Formatter('[%(levelname)s]%(asctime)s %(name)s:%(message)s')
+# INFO以上はファイルに出力
+# 保存先ディレクトリがない場合は作成
+dir = Path('../log')
+dir.mkdir(parents=True, exist_ok=True)
+file_handler = logging.FileHandler('../log/visualize.log')
+file_handler.setLevel(logging.INFO)
+file_handler.setFormatter(formatter)
+# ERROR以上はコンソールにも出力
+stream_handler = logging.StreamHandler()
+stream_handler.setFormatter(formatter)
+stream_handler.setLevel(logging.ERROR)
+logger.addHandler(file_handler)
+logger.addHandler(stream_handler)
+
 
 def set_argparse():
     parser = argparse.ArgumentParser(description='TODO')
@@ -20,7 +41,22 @@ def main():
     # 実際の情報の日数分+10日間用意（TODO:引数で渡す）
     x = np.arange(df_real['day from 5 years ago'].iloc[0], df_real['day from 5 years ago'].iloc[-1] + 10 + 1, 1)
     for index, item in df_learn.iterrows():
-        y_hat = item['pipeline'].predict(x.reshape(-1, 1))
+        if item['opt1'] is None:
+            y_hat = item['pipeline'].predict(x.reshape(-1, 1))
+        # TODO:もうちょいうまくやる
+        else:
+            logger.info('rnn')
+            test_data = item['opt1'][1]
+            x_test = []
+            window_size = 60
+            for i in range(window_size, len(x)-11):
+                x_test.append(test_data[i-window_size:i, 0])
+            x_test = np.array(x_test)
+            x_test = np.reshape(x_test, (x_test.shape[0], x_test.shape[1], 1))
+            predictions = item['pipeline'].predict(x_test)
+            y_hat = item['opt1'][0].inverse_transform(predictions)
+            # 1次元化
+            y_hat = y_hat.ravel()
         df_estimate = pd.DataFrame({'close':pd.Series(y_hat), 'day from 5 years ago':pd.Series(x), 'real/model':item['model name']})
         df_real=pd.concat([df_real, df_estimate])
 

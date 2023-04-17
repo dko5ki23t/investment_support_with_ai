@@ -1,11 +1,31 @@
 import argparse         # コマンドライン引数チェック用
 import pandas as pd
 import glob
-
+import logging
+from pathlib import Path
 from yahoo_finance_api2 import share
 from yahoo_finance_api2.exceptions import YahooFinanceError
 import sys
 import numpy as np
+
+# ログ設定
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+formatter = logging.Formatter('[%(levelname)s]%(asctime)s %(name)s:%(message)s')
+# INFO以上はファイルに出力
+# 保存先ディレクトリがない場合は作成
+dir = Path('../../log')
+dir.mkdir(parents=True, exist_ok=True)
+file_handler = logging.FileHandler('../../log/estimate.log')
+file_handler.setLevel(logging.INFO)
+file_handler.setFormatter(formatter)
+# ERROR以上はコンソールにも出力
+stream_handler = logging.StreamHandler()
+stream_handler.setFormatter(formatter)
+stream_handler.setLevel(logging.ERROR)
+logger.addHandler(file_handler)
+logger.addHandler(stream_handler)
+
 
 def set_argparse():
     parser = argparse.ArgumentParser(description='TODO')
@@ -26,7 +46,7 @@ def main():
     for file in files:
         df = pd.read_pickle(file)
         # 銘柄情報出力
-        print(str(df['code'].iloc[0]) + ' : ' + str(df['stock name'].iloc[0]))
+        logger.info(str(df['code'].iloc[0]) + ' : ' + str(df['stock name'].iloc[0]))
         # より良いMSRを出したモデルを取得
         min_tmp = df['MSR'].min()
         min_idx = df['MSR'].idxmin()
@@ -45,7 +65,7 @@ def main():
                                                 share.FREQUENCY_TYPE_MINUTE,
                                                 1)
         except YahooFinanceError as e:
-            print(e.message)
+            logger.error(e.message)
             sys.exit(1)
         # symbol_dataがNoneの場合あり。それは無視する
         if symbol_data is None:

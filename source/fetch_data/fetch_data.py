@@ -30,6 +30,8 @@ def kabuka(code, year, day):
     df_base = pd.DataFrame(symbol_data.values(), index=symbol_data.keys()).T
     df_base.timestamp = pd.to_datetime(df_base.timestamp, unit='ms')
     df_base.index = pd.DatetimeIndex(df_base.timestamp, name='timestamp').tz_localize('UTC').tz_convert('Asia/Tokyo')
+    # NaNを含む行は消す(TODO:これでいいのか)
+    df_base = df_base.dropna(how='any')
     df_base = df_base.reset_index(drop=True)
     
     

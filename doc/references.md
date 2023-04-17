@@ -13,6 +13,12 @@
 
    https://deepage.net/tensorflow/2017/01/17/how-to-install-tensorflow.html
 
+ * pyenv-win/pyenv-win
+
+   TensorFlowをインストールする際にpyenvを使おうと思ったらWindowsはオフィシャルサポートされてなかったのでこちらを使った。
+
+   https://github.com/pyenv-win/pyenv-win
+
 ### 株価データ取得
  * 株情報を取得するAPIどれが良い - Qiita
 

@@ -66,7 +66,7 @@ class model_2:
         #x = np.arange(X.iloc[-1] + 1, X.iloc[-1] + day_predict + 1, 1)
         #y_hat = reg.predict(x.reshape(-1, 1))
         
-        return (reg, msr)
+        return (reg, msr, None)
         '''
         回帰
         閉じた式による導出
