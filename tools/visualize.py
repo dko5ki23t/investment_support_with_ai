@@ -2,27 +2,13 @@ import argparse         # コマンドライン引数チェック用
 import pandas as pd
 import numpy as np
 import plotly.express as px
-from sklearn.preprocessing import MinMaxScaler
-import logging
-from pathlib import Path
 
-# ログ設定
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-formatter = logging.Formatter('[%(levelname)s]%(asctime)s %(name)s:%(message)s')
-# INFO以上はファイルに出力
-# 保存先ディレクトリがない場合は作成
-dir = Path('../log')
-dir.mkdir(parents=True, exist_ok=True)
-file_handler = logging.FileHandler('../log/visualize.log')
-file_handler.setLevel(logging.INFO)
-file_handler.setFormatter(formatter)
-# ERROR以上はコンソールにも出力
-stream_handler = logging.StreamHandler()
-stream_handler.setFormatter(formatter)
-stream_handler.setLevel(logging.ERROR)
-logger.addHandler(file_handler)
-logger.addHandler(stream_handler)
+# 自作ロガー追加
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '../source/logger'))
+from logger import Logger
+logger = Logger(__name__, '../log', 'visualize.log')
 
 
 def set_argparse():

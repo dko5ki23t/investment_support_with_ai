@@ -1,15 +1,16 @@
 from yahoo_finance_api2 import share
 from yahoo_finance_api2.exceptions import YahooFinanceError
 import pandas as pd
-import sys
-import plotly.express as px
-from numpy.polynomial import Polynomial
-import numpy as np
-from sklearn.linear_model import LinearRegression
-from sklearn.preprocessing import PolynomialFeatures
-from sklearn.pipeline import make_pipeline
 import argparse         # コマンドライン引数チェック用
 from pathlib import Path
+
+# 自作ロガー追加
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '../logger'))
+from logger import Logger
+logger = Logger(__name__, '../../log', 'fetch_data.log')
+
 
 # 目的変数を作成する
 def kabuka(code, year, day):
@@ -23,7 +24,7 @@ def kabuka(code, year, day):
                                               share.FREQUENCY_TYPE_DAY,
                                               day)
     except YahooFinanceError as e:
-        print(e.message)
+        logger.error(e.message)
         sys.exit(1)
     # 株価をデータフレームに入れている
     df_base = pd.DataFrame(symbol_data)

@@ -4,6 +4,13 @@ import pandas as pd
 import glob
 from pathlib import Path
 
+# 自作ロガー追加
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '../logger'))
+from logger import Logger
+logger = Logger(__name__, '../../log', 'learn.log')
+
 def set_argparse():
     parser = argparse.ArgumentParser(description='TODO')
     parser.add_argument('dir', help='stock data directory')
