@@ -9,7 +9,7 @@ import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '../logger'))
 from logger import Logger
-logger = Logger(__name__, '../../log', 'fetch_data.log')
+logger = Logger(__name__, 'fetch_data.log')
 
 
 # 目的変数を作成する

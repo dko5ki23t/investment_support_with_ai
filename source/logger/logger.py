@@ -1,18 +1,20 @@
 import logging
 from pathlib import Path
+import os
 
 class Logger:
 
-    def __init__(self, name, log_dir, log_file):
+    def __init__(self, name, log_file):
         # ログ初期設定
         self.logger = logging.getLogger(name)
         self.logger.setLevel(logging.INFO)
         formatter = logging.Formatter('[%(levelname)s]%(asctime)s %(name)s:%(message)s')
         # INFO以上はファイルに出力
         # 保存先ディレクトリがない場合は作成
-        dir = Path(log_dir)
+        dir_name = os.path.join(os.path.dirname(__file__), '../../log')
+        dir = Path(dir_name)
         dir.mkdir(parents=True, exist_ok=True)
-        file_handler = logging.FileHandler(log_dir + '/' + log_file)
+        file_handler = logging.FileHandler(dir_name + '/' + log_file)
         file_handler.setLevel(logging.INFO)
         file_handler.setFormatter(formatter)
         # ERROR以上はコンソールにも出力

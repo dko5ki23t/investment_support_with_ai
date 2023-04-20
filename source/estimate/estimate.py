@@ -11,7 +11,10 @@ import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '../logger'))
 from logger import Logger
-logger = Logger(__name__, '../../log', 'estimate.log')
+logger = Logger(__name__, 'estimate.log')
+# 自作モデル追加
+sys.path.append(os.path.join(os.path.dirname(__file__), '../learn'))
+import model
 
 
 def set_argparse():
@@ -30,19 +33,18 @@ def main():
     files = glob.glob(args.dir + '/*.pkl')
     min_msr = 10000
     stock_name = ''
+    predict_results = pd.DataFrame(columns=['code', 'stock name', 'price', 'gain', 'msr'])
     for file in files:
         df = pd.read_pickle(file)
         # 銘柄情報出力
-        logger.info(str(df['code'].iloc[0]) + ' : ' + str(df['stock name'].iloc[0]))
-        # より良いMSRを出したモデルを取得
-        min_tmp = df['MSR'].min()
-        min_idx = df['MSR'].idxmin()
-        model_pipeline = df.loc[min_idx]['pipeline']
-        # 次の日～n日後の値推定(TODO:全日はいらない？)
-        x = np.arange(df.loc[min_idx]['last_day'] + 1, df.loc[min_idx]['last_day'] + int(args.term) + 1, 1)
-        predict_val = model_pipeline.predict(x.reshape(-1, 1))[-1]
+        #logger.info(str(df[0].code) + ':' + str(df[0].stock))
+        #for model in df:
+        #    (days, predict_vals) = model.predict(1)
+        #    logger.info(str(model.name) + ' val:' + str(predict_vals[-1]) + ' msr:' + str(model.msr))
+        #min_tmp = df['MSR'].min()
+        #min_idx = df['MSR'].idxmin()
         # 現在の株価取得(TODO:最新とは言えなさそう？ & 値がnanになることあり)
-        company_code = str(df['code'].iloc[0]) + '.T'
+        company_code = str(df[0].code) + '.T'
         my_share = share.Share(company_code)
         symbol_data = None
 
@@ -58,13 +60,21 @@ def main():
         if symbol_data is None:
             continue
         df_now = pd.DataFrame(symbol_data.values(), index=symbol_data.keys()).T
-        print('now:' + str(df_now['close'].iloc[-1]) + ' predict:' + str(predict_val))
+        now_val = df_now['close'].iloc[-1]
+        # TODO:より良いMSRを出したモデルを取得
+        # とりあえず今はRNNのモデルを選択
+        (days, predict_vals) = df[2].predict(1)
+        tmp_s = pd.Series([df[0].code, df[0].stock, now_val * 100, (predict_vals[-1] - now_val) * 100, df[2].msr], index=predict_results.columns)
+        predict_results = pd.concat([predict_results, pd.DataFrame(data=tmp_s.values.reshape(1, -1), columns=predict_results.columns)])
         
-        if min_msr > min_tmp:
-            min_msr = min_tmp
-            stock_name = str(df['stock name'].iloc[0])
+        #if min_msr > min_tmp:
+        #    min_msr = min_tmp
+        #    stock_name = str(df['stock name'].iloc[0])
     
-    print('buy:' + stock_name)
+    predict_results = predict_results[predict_results['price'] < int(args.now)]
+    predict_results = predict_results.sort_values('gain', ascending=False)
+    logger.info(predict_results)
+
 
 if __name__ == "__main__":
     main()

@@ -9,7 +9,7 @@ import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '../logger'))
 from logger import Logger
-logger = Logger(__name__, '../../log', 'learn.log')
+logger = Logger(__name__, 'learn.log')
 
 def set_argparse():
     parser = argparse.ArgumentParser(description='TODO')
@@ -27,9 +27,12 @@ def main():
     dir.mkdir(parents=True, exist_ok=True)
     for file in files:
         df = pd.read_pickle(file)
-        ret_df = model.estimate(df, 'day from 5 years ago', 'close')
-        # 学習結果の保存
-        ret_df.to_pickle(str(args.out_dir) + '/' + str(df['code'].iloc[0]) + '.pkl')
+        try:
+            ret_model = model.estimate(df, 'day from 5 years ago', 'close')
+            # 学習結果の保存
+            ret_model.to_pickle(str(args.out_dir) + '/' + str(df['code'].iloc[0]) + '.pkl')
+        except Exception as e:
+            logger.error(e)
 
 if __name__ == "__main__":
     main()
