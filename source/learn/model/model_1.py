@@ -38,34 +38,33 @@ class model_1:
         self : object
             Pipeline with fitted steps.
     """
-    def __init__(self, code, stock, X, Y):
+    def __init__(self, code, stock, X, Y, last_date):
         self.name = 'model1'
         self.code = code
         self.stock = stock
         self.days = X
+        self.last_date = last_date
+        self.Y = Y
         '''
         回帰
         閉じた式による導出
         start
         '''
         # 4次の重回帰関数を得る
-        #W = Polynomial.fit(X, Y, 1)
         self.reg = make_pipeline(PolynomialFeatures(4), LinearRegression())
         self.reg.fit(X.to_numpy().reshape(-1, 1), Y)
-        # 0-dayの最大値まで等間隔に配置した100個の数値を用意
-        #x = np.linspace(0, len(df) - 1, 100)
-        # 目的変数の推定値を求める
-        #y_hat = W(x)
-        #y_hat = reg.predict(x.reshape(-1, 1))
-        #df_estimate = pd.DataFrame({'close':pd.Series(y_hat), 'day from 5 years ago':pd.Series(x), 'real/estimate':'estimate'})
-        #df=pd.concat([df, df_estimate])
         
         # MSR(平均二乗差)
         self.msr = self.reg.score(X.to_numpy().reshape(-1, 1), Y)
 
-        # 次の日～n日後の値推定(TODO:全日はいらない？)
-        #x = np.arange(X.iloc[-1] + 1, X.iloc[-1] + day_predict + 1, 1)
-        #y_hat = reg.predict(x.reshape(-1, 1))
+    def compile(self, delta_X, delta_Y):
+        # 日数,終値を結合
+        self.days = pd.concat([self.days, delta_X])
+        self.Y = pd.concat([self.Y, delta_Y])
+        self.reg.fit(self.days.to_numpy().reshape(-1, 1), self.Y)
+        # MSR(平均二乗差)
+        self.msr = self.reg.score(self.days.to_numpy().reshape(-1, 1), self.Y)
+        
 
     def predict(self, days):
         first_day = self.days.iloc[0]

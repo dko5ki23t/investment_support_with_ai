@@ -30,10 +30,10 @@ def main():
     # 実際の情報の日数分+10日間用意（TODO:引数で渡す）
     for model in df_learn:
         (days, vals) = model.predict(10)
-        df_estimate = pd.DataFrame({'close':pd.Series(vals), 'day from 5 years ago':pd.Series(days), 'real/model':model.name})
+        df_estimate = pd.DataFrame({'close':pd.Series(vals), 'day':pd.Series(days), 'real/model':model.name})
         df_real=pd.concat([df_real, df_estimate])
 
-    fig = px.line(df_real, x='day from 5 years ago', y='close', color='real/model')
+    fig = px.line(df_real, x='day', y='close', color='real/model')
     fig.write_html(args.outfile)
 
 if __name__ == "__main__":

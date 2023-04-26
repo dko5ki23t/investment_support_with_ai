@@ -3,6 +3,8 @@ from yahoo_finance_api2.exceptions import YahooFinanceError
 import pandas as pd
 import argparse         # コマンドライン引数チェック用
 from pathlib import Path
+import os
+import math
 
 # 自作ロガー追加
 import sys
@@ -13,19 +15,19 @@ logger = Logger(__name__, 'fetch_data.log')
 
 
 # 目的変数を作成する
-def kabuka(code, year, day):
+def get_stockdata(code, period_type, period, freq_type, freq):
     company_code = str(code) + '.T'
     my_share = share.Share(company_code)
     symbol_data = None
 
     try:
-        symbol_data = my_share.get_historical(share.PERIOD_TYPE_YEAR,
-                                              year,
-                                              share.FREQUENCY_TYPE_DAY,
-                                              day)
+        symbol_data = my_share.get_historical(period_type,
+                                              period,
+                                              freq_type,
+                                              freq)
     except YahooFinanceError as e:
         logger.error(e.message)
-        sys.exit(1)
+        return None
     # 株価をデータフレームに入れている
     df_base = pd.DataFrame(symbol_data)
     df_base = pd.DataFrame(symbol_data.values(), index=symbol_data.keys()).T
@@ -36,7 +38,7 @@ def kabuka(code, year, day):
     df_base = df_base.reset_index(drop=True)
     
     
-    return company_code, df_base
+    return df_base
 
 def set_argparse():
     parser = argparse.ArgumentParser(description='TODO')
@@ -54,14 +56,40 @@ def main():
     dir = Path(args.out_dir)
     dir.mkdir(parents=True, exist_ok=True)
     for index, item in df.iterrows():
-        ret = kabuka(item['code'], 5, 1)    # 5年前まで、1日ごとに取得
-        stock_df = ret[1]
-        stock_df['day from 5 years ago'] = range(0, len(stock_df))
-        stock_df['real/model'] = 'real'
-        stock_df['code'] = item['code']
-        stock_df['stock name'] = item['name']
-        stock_df.to_pickle(str(args.out_dir) + '/' + str(item['code']) + '.pkl')
-        # TODO:ログ保存
+        stock_file_name = str(args.out_dir) + '/' + str(item['code']) + '.pkl'
+        stock_df = pd.DataFrame
+        # 既に株価情報ファイルが存在するか確認
+        if os.path.exists(stock_file_name):     # 差分のみ取得
+            stock_df = pd.read_pickle(stock_file_name)
+            diff_days = math.ceil((pd.Timestamp.now() - stock_df['timestamp'].iloc[-1]).total_seconds() / 60 / 60 /24)
+            ret = get_stockdata(item['code'], share.PERIOD_TYPE_DAY, diff_days, share.FREQUENCY_TYPE_DAY, 1)
+            # 結合するが、日が変わっていないデータは捨てる
+            if int((ret['timestamp'].iloc[0] - stock_df['timestamp'].iloc[-1]).total_seconds() / 60 /60 / 24) <= 0:
+                ret = ret.drop(ret.index[0])
+            logger.info('get stock data (code:' + str(item['code']) + ') for ' + str(len(ret)) + ' days')
+            stock_df = pd.concat([stock_df, ret])
+            stock_df['day'] = range(0, len(stock_df))
+            stock_df['real/model'] = 'real'
+            stock_df['code'] = item['code']
+            stock_df['stock name'] = item['name']
+            logger.info(stock_df)
+        else:                                   # 全取得
+            # エラーが出ない範囲で、最も長い期間で指定して取得する
+            # TODO:マシな方法ない？
+            for i in range(100, 0, -1):
+                try:
+                    ret = get_stockdata(
+                        item['code'], share.PERIOD_TYPE_YEAR, i, share.FREQUENCY_TYPE_DAY, 1)    # i年前まで、1日ごとに取得
+                except Exception as e:
+                    continue
+                logger.info('get stock data (code:' + str(item['code']) + ') for ' + str(i) + ' years')
+                stock_df = ret
+                stock_df['day'] = range(0, len(stock_df))
+                stock_df['real/model'] = 'real'
+                stock_df['code'] = item['code']
+                stock_df['stock name'] = item['name']
+                break
+        stock_df.to_pickle(stock_file_name)
 
 if __name__ == "__main__":
     main()

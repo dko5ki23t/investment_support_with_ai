@@ -38,20 +38,25 @@ class model_3:
         self : object
             Pipeline with fitted steps.
     """
-    def __init__(self, code, stock, X, Y):
+    def __init__(self, code, stock, X, Y, last_date):
         self.name = 'model3'
         self.code = code
         self.stock = stock
         self.days = X
+        self.last_date = last_date
 
         # データを0-1に正規化
         self.scaler = MinMaxScaler(feature_range=(0, 1))
         self.scaled_Y = self.scaler.fit_transform(Y)
         # 全体の80%をトレーニングデータとして扱う
         training_data_len = int(np.ceil(len(Y) * .8))
-        #training_data_len = int(np.ceil(len(Y) * 1.0))
         # どれくらいの期間をもとに予測するか
         window_size = 60
+        # データ数が足りなければ終了
+        if len(self.scaled_Y) <= window_size:
+            self.msr = 10000
+            logger.info('[' + str(self.code) + ']cannot learn because few data')
+            return
 
         train_data = self.scaled_Y[0:int(training_data_len), :]
 
@@ -101,19 +106,69 @@ class model_3:
         predictions = self.model.predict(x_test)
         predictions = self.scaler.inverse_transform(predictions)
         logger.info('predictions.shape:' + str(predictions.shape))
-        #df_estimate = pd.DataFrame({'close':pd.Series(predictions.ravel()), 'day from 5 years ago':pd.Series(X[training_data_len:]), 'real/estimate':'estimate'})
-        #df_estimate = pd.DataFrame({'close':pd.Series(predictions.ravel()), 'day from 5 years ago':pd.Series(X), 'real/estimate':'estimate'})
-        #df=pd.concat([data, df_estimate])
-
-        #fig = px.line(df, x='day from 5 years ago', y='close', color='real/estimate')
-        #fig.show()
 
         # MSR(平均二乗差)
         self.msr = np.mean((predictions - y_test) ** 2)
 
-        # TODO:もうちょいうまくやる
-        # return (model, mse, scaler)
+    def compile(self, delta_X, delta_Y):
+        logger.info('[' + str(self.code) + ']' + str(delta_X))
+        # 日数を結合
+        self.days = pd.concat([self.days, delta_X])
+        # どれくらいの期間をもとに予測するか
+        window_size = 60
+        # データ数が足りなければ終了
+        if len(self.scaled_Y) <= window_size:
+            self.msr = 10000
+            logger.info('[' + str(self.code) + ']cannot learn because few data')
+            return
+        training_data_begin = len(self.scaled_Y) - window_size
+        Y = self.scaler.inverse_transform(self.scaled_Y)
+        Y = np.concatenate([Y, delta_Y.to_numpy().reshape(-1, 1)])
+        # データを0-1に正規化
+        self.scaled_Y = self.scaler.fit_transform(Y)
+        # 渡された差分の100%をトレーニングデータとして扱う
+        training_data_len = int(np.ceil(len(Y) * 1.0))
+        #training_data_len = int(np.ceil(len(Y) * 1.0))
 
+        train_data = self.scaled_Y[training_data_begin:int(training_data_len), :]
+
+        # train_dataをx_trainとy_trainに分ける
+        x_train = []
+        y_train = train_data[window_size:, :]
+        for i in range(window_size, len(train_data)):
+            x_train.append(train_data[i - window_size:i, 0])
+
+        # numpy arrayに変換
+        x_train, y_train = np.array(x_train), np.array(y_train)
+        x_train = np.reshape(x_train, (x_train.shape[0], x_train.shape[1], 1))
+
+        history = self.model.fit(x_train, y_train, batch_size=32, epochs=100)
+        
+        '''
+        # テストデータ(残り20%)作成
+        test_data = self.scaled_Y[training_data_len - window_size:, :]
+        #test_data = scaled_Y
+
+        x_test = []
+        y_test = Y[training_data_len:, :]
+        for i in range(window_size, len(test_data)):
+            x_test.append(test_data[i-window_size:i, 0])
+
+        # numpy arrayに変換
+        x_test = np.array(x_test)
+        x_test = np.reshape(x_test, (x_test.shape[0], x_test.shape[1], 1))
+
+        logger.info('x_test.shape:' + str(x_test.shape))
+        logger.info('y_test.shape:' + str(y_test.shape))
+        
+        predictions = self.model.predict(x_test)
+        predictions = self.scaler.inverse_transform(predictions)
+        logger.info('predictions.shape:' + str(predictions.shape))
+        '''
+
+        # MSR(平均二乗差)
+        # self.msr = np.mean((predictions - y_test) ** 2)
+        
     def predict(self, days):
         window_size = 60
         x_test = []
