@@ -3,9 +3,9 @@ import argparse         # コマンドライン引数チェック用
 import pandas as pd
 import glob
 from pathlib import Path
-import wave
-import struct
-import pyaudio
+#import wave
+#import struct
+#import pyaudio
 
 # 自作ロガー追加
 import sys
@@ -24,17 +24,17 @@ def set_argparse():
 def main():
     args = set_argparse()
     # 学習完了音ファイル読み込み
-    sound_file_name = os.path.join(os.path.dirname(__file__), 'se_sad03.wav')
-    sound_file = wave.open(sound_file_name, mode='rb')
+    #sound_file_name = os.path.join(os.path.dirname(__file__), 'se_sad03.wav')
+    #sound_file = wave.open(sound_file_name, mode='rb')
     # ストリーム作成
-    p = pyaudio.PyAudio() # pyaudioのインスタンス化
-    stream = p.open(
-        format = p.get_format_from_width(sound_file.getsampwidth()),
-        channels = sound_file.getnchannels(),
-        rate = sound_file.getframerate(),
-        output = True
-        )
-    chunk = 1024
+    #p = pyaudio.PyAudio() # pyaudioのインスタンス化
+    #stream = p.open(
+    #    format = p.get_format_from_width(sound_file.getsampwidth()),
+    #    channels = sound_file.getnchannels(),
+    #    rate = sound_file.getframerate(),
+    #    output = True
+    #    )
+    #chunk = 1024
     # ファイル読み込み
     files = glob.glob(args.dir + '/*.pkl')
     # 保存先ディレクトリがない場合は作成
@@ -59,13 +59,13 @@ def main():
                 continue
         # 学習結果の保存
         models.to_pickle(models_file_name)
-    sound_file.rewind()
-    sound_data = sound_file.readframes(chunk) #chunk分（1024個分）のフレーム（音の波形のデータ）を読み込む。
-    while sound_data:
-        stream.write(sound_data) #ストリームにデータを書き込むことで音を鳴らす。
-        sound_data = sound_file.readframes(chunk) #新しくchunk分のフレームを読み込む。    
-    stream.close() #ストリームを閉じる。
-    p.terminate() #PyAudioを閉じる。
+    #sound_file.rewind()
+    #sound_data = sound_file.readframes(chunk) #chunk分（1024個分）のフレーム（音の波形のデータ）を読み込む。
+    #while sound_data:
+    #    stream.write(sound_data) #ストリームにデータを書き込むことで音を鳴らす。
+    #    sound_data = sound_file.readframes(chunk) #新しくchunk分のフレームを読み込む。    
+    #stream.close() #ストリームを閉じる。
+    #p.terminate() #PyAudioを閉じる。
 
 if __name__ == "__main__":
     main()

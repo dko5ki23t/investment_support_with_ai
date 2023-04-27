@@ -30,9 +30,29 @@
 
    https://qiita.com/d83yk/items/f4e5019d3f4bbeaf36dc
 
-* Dockerから最新のTensorflowを使う方法【Windows】 - なるぽのブログ
+ * Dockerから最新のTensorflowを使う方法【Windows】 - なるぽのブログ
 
-  https://yu-nix.com/archives/tensorflow-docker-install/
+   https://yu-nix.com/archives/tensorflow-docker-install/
+
+ * Tensorflowのdockerを使ってみる（docker入門） - Qiita
+
+   https://qiita.com/mktshhr/items/d6eda04e3b4eae8fd51d
+
+ * Windows11でWSL2＋nvidia-dockerでPyTorchを動かすのがすごすぎた
+
+   https://blog.shikoan.com/wsl2-ndivid-docker-pytorch/
+
+ * Windows11 + WSL2 + Docker DesktopでGPU環境を作る
+
+   最終的にこのページの方法で環境構築するとよさそう。
+
+   https://zenn.dev/okz/articles/83e6f899150b1e
+
+ * WSL2＋Ubuntu 20.04でGUIアプリを動かす | AsTechLog
+
+   WSL2(Ubuntu)をGUIで操作しようとして参考にした。成功はさせていない。
+
+   https://astherier.com/blog/2020/08/run-gui-apps-on-wsl2/
 
 ### 株価データ取得
  * 株情報を取得するAPIどれが良い - Qiita
