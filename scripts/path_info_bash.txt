@@ -1,0 +1,5 @@
+# スクリプトファイルに読ませる、ディレクトリやファイルのパス
+
+FETCHED_DIR="../data/fetched_data"                   # 株価データの格納場所
+LEARNING_DIR="../data/learning_data"                 # 学習データの格納場所
+STOCKCODE_CSV="../data/stockcode/tosho_growth.csv"   # 銘柄コードのファイル

@@ -63,14 +63,19 @@ def main():
         now_val = df_now['close'].iloc[-1]
         # TODO:より良いMSRを出したモデルを取得
         # とりあえず今はRNNのモデルを選択
-        (days, predict_vals) = df[2].predict(1)
-        tmp_s = pd.Series([df[0].code, df[0].stock, now_val * 100, (predict_vals[-1] - now_val) * 100, df[2].msr], index=predict_results.columns)
+        # TODO:エラー発生時には無視する
+        try:
+            (days, predict_vals) = df[2].predict(1)
+            tmp_s = pd.Series([df[0].code, df[0].stock, now_val * 100, (predict_vals[-1] - now_val) * 100, df[2].msr], index=predict_results.columns)
+        except Exception as e:
+            continue
         predict_results = pd.concat([predict_results, pd.DataFrame(data=tmp_s.values.reshape(1, -1), columns=predict_results.columns)])
         
         #if min_msr > min_tmp:
         #    min_msr = min_tmp
         #    stock_name = str(df['stock name'].iloc[0])
     
+    logger.info(predict_results)
     predict_results = predict_results[predict_results['price'] < int(args.now)]
     predict_results = predict_results.sort_values('gain', ascending=False)
     logger.info(predict_results)

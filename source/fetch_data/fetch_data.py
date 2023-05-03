@@ -5,6 +5,10 @@ import argparse         # コマンドライン引数チェック用
 from pathlib import Path
 import os
 import math
+#import tkinter as tk
+#import tkinter.messagebox as messagebox
+import tqdm
+import time
 
 # 自作ロガー追加
 import sys
@@ -55,7 +59,9 @@ def main():
     # ディレクトリがない場合は作成
     dir = Path(args.out_dir)
     dir.mkdir(parents=True, exist_ok=True)
-    for index, item in df.iterrows():
+    time_begin = time.perf_counter()
+    for index in tqdm.tqdm(range(len(df))):
+        item = df.iloc[index]
         stock_file_name = str(args.out_dir) + '/' + str(item['code']) + '.pkl'
         stock_df = pd.DataFrame
         # 既に株価情報ファイルが存在するか確認
@@ -90,6 +96,12 @@ def main():
                 stock_df['stock name'] = item['name']
                 break
         stock_df.to_pickle(stock_file_name)
+    time_end = time.perf_counter()
+    elapsed = time_end - time_begin
+    logger.info('fetch complete in ' + str(elapsed) + 's')
+    # 完了通知
+    #tk.Tk().withdraw()
+    #messagebox.showinfo('message', 'fetch complete')
 
 if __name__ == "__main__":
     main()

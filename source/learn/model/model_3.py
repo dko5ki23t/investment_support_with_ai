@@ -1,5 +1,7 @@
 import pandas as pd
 import numpy as np
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL']='2'   # TensorFlowの警告を出力しない
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import MinMaxScaler
 from keras.models import Sequential
@@ -7,7 +9,6 @@ from keras.layers import Dense, LSTM, Dropout
 
 # 自作ロガー追加
 import sys
-import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '../../logger'))
 from logger import Logger
 logger = Logger(__name__, 'model_3.log')
@@ -84,8 +85,8 @@ class model_3:
         self.model.add(Dropout(0.2))
         self.model.add(Dense(units=1))
 
-        self.model.compile(optimizer='adam', loss='mean_squared_error')
-        history = self.model.fit(x_train, y_train, batch_size=32, epochs=100)
+        self.model.compile(optimizer='adam', loss='mean_squared_error', verbose=0)
+        history = self.model.fit(x_train, y_train, batch_size=32, epochs=100, verbose=0)
         
         # テストデータ(残り20%)作成
         test_data = self.scaled_Y[training_data_len - window_size:, :]
@@ -142,7 +143,7 @@ class model_3:
         x_train, y_train = np.array(x_train), np.array(y_train)
         x_train = np.reshape(x_train, (x_train.shape[0], x_train.shape[1], 1))
 
-        history = self.model.fit(x_train, y_train, batch_size=32, epochs=100)
+        history = self.model.fit(x_train, y_train, batch_size=32, epochs=100, verbose=0)
         
         '''
         # テストデータ(残り20%)作成

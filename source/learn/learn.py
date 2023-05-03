@@ -3,6 +3,8 @@ import argparse         # コマンドライン引数チェック用
 import pandas as pd
 import glob
 from pathlib import Path
+import tqdm
+import time
 #import wave
 #import struct
 #import pyaudio
@@ -40,7 +42,9 @@ def main():
     # 保存先ディレクトリがない場合は作成
     dir = Path(args.out_dir)
     dir.mkdir(parents=True, exist_ok=True)
-    for file in files:
+    time_begin = time.perf_counter()
+    for index in tqdm.tqdm(range(len(files))):
+        file = files[index]
         df = pd.read_pickle(file)
         models_file_name = str(args.out_dir) + '/' + str(df['code'].iloc[0]) + '.pkl'
         # 既に学習モデルファイルが存在するか確認
@@ -59,6 +63,9 @@ def main():
                 continue
         # 学習結果の保存
         models.to_pickle(models_file_name)
+    time_end = time.perf_counter()
+    elapsed = time_end - time_begin
+    logger.info('learn complete in ' + str(elapsed) + 's')
     #sound_file.rewind()
     #sound_data = sound_file.readframes(chunk) #chunk分（1024個分）のフレーム（音の波形のデータ）を読み込む。
     #while sound_data:
