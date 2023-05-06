@@ -5,6 +5,7 @@ from pathlib import Path
 from yahoo_finance_api2 import share
 from yahoo_finance_api2.exceptions import YahooFinanceError
 import numpy as np
+import tqdm
 
 # 自作ロガー追加
 import sys
@@ -34,7 +35,9 @@ def main():
     min_msr = 10000
     stock_name = ''
     predict_results = pd.DataFrame(columns=['code', 'stock name', 'price', 'gain', 'msr'])
-    for file in files:
+    print('scanning learning data ...')
+    for index in tqdm.tqdm(range(len(files))):
+        file = files[index]
         df = pd.read_pickle(file)
         # 銘柄情報出力
         #logger.info(str(df[0].code) + ':' + str(df[0].stock))
@@ -74,12 +77,23 @@ def main():
         #if min_msr > min_tmp:
         #    min_msr = min_tmp
         #    stock_name = str(df['stock name'].iloc[0])
-    
-    logger.info(predict_results)
     predict_results = predict_results[predict_results['price'] < int(args.now)]
     predict_results = predict_results.sort_values('gain', ascending=False)
     logger.info(predict_results)
-
+    print(predict_results)
+    # 予想収益が多い順に、100株ずつ買っていく戦略
+    print('Recommended purchase method:')
+    balance = int(args.now)
+    idx = 0
+    while balance > 0:
+        look = predict_results.iloc[idx]
+        price = look['price'] * 100
+        if price > balance:
+            break
+        idx += 1
+        print(idx, look['code'], look['stock name'], 'Expected revenue:', (look['gain'] * 100 - price))
+        balance -= price
+    
 
 if __name__ == "__main__":
     main()
