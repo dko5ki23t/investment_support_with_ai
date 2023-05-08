@@ -51,6 +51,7 @@ def main():
         my_share = share.Share(company_code)
         symbol_data = None
 
+        # TODO:エラー発生時の対処として、リトライもあり？
         try:
             symbol_data = my_share.get_historical(share.PERIOD_TYPE_DAY,
                                                 1,
@@ -58,7 +59,7 @@ def main():
                                                 1)
         except YahooFinanceError as e:
             logger.error(e.message)
-            sys.exit(1)
+            continue
         # symbol_dataがNoneの場合あり。それは無視する
         if symbol_data is None:
             continue
