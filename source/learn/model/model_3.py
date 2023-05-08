@@ -6,6 +6,8 @@ from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import MinMaxScaler
 from keras.models import Sequential
 from keras.layers import Dense, LSTM, Dropout
+#import tensorflow as tf
+#tf.debugging.set_log_device_placement(True)
 
 # 自作ロガー追加
 import sys
@@ -54,7 +56,8 @@ class model_3:
         # どれくらいの期間をもとに予測するか
         window_size = 60
         # データ数が足りなければ終了
-        if len(self.scaled_Y) <= window_size:
+        # TODO:ここで終了するとmodelが作成されず、compile(),predict()呼び出し時にエラーになる
+        if training_data_len <= window_size:
             self.msr = 10000
             logger.info('[' + str(self.code) + ']cannot learn because few data')
             return
@@ -69,10 +72,8 @@ class model_3:
 
         # numpy arrayに変換
         x_train, y_train = np.array(x_train), np.array(y_train)
+        logger.info('[' + str(self.code) + ']x_train.shape:' + str(x_train.shape) + ' y_train.shape:' + str(y_train.shape))
         x_train = np.reshape(x_train, (x_train.shape[0], x_train.shape[1], 1))
-
-        logger.info('x_train.shape:' + str(x_train.shape))
-        logger.info('y_train.shape:' + str(y_train.shape))
 
         self.model = Sequential()
         self.model.add(LSTM(units=50,return_sequences=True,input_shape=(x_train.shape[1], 1)))
@@ -85,7 +86,17 @@ class model_3:
         self.model.add(Dropout(0.2))
         self.model.add(Dense(units=1))
 
-        self.model.compile(optimizer='adam', loss='mean_squared_error', verbose=0)
+        print('compile start')
+        self.model.compile(optimizer='adam', loss='mean_squared_error')
+        # TensorFlowのログを出力
+        # 保存先ディレクトリがない場合は作成
+        import datetime
+        from pathlib import Path
+        dir_name = os.path.join(os.path.dirname(__file__), '../../../log/fit/', str(datetime.datetime.now().strftime("%Y%m%d-%H%M%S")))
+        dir = Path(dir_name)
+        dir.mkdir(parents=True, exist_ok=True)
+        #tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=dir_name, histogram_freq=1)
+        #history = self.model.fit(x_train, y_train, batch_size=32, epochs=100, verbose=0, callbacks=[tensorboard_callback])
         history = self.model.fit(x_train, y_train, batch_size=32, epochs=100, verbose=0)
         
         # テストデータ(残り20%)作成
@@ -101,18 +112,18 @@ class model_3:
         x_test = np.array(x_test)
         x_test = np.reshape(x_test, (x_test.shape[0], x_test.shape[1], 1))
 
-        logger.info('x_test.shape:' + str(x_test.shape))
-        logger.info('y_test.shape:' + str(y_test.shape))
+        #logger.info('x_test.shape:' + str(x_test.shape))
+        #logger.info('y_test.shape:' + str(y_test.shape))
         
         predictions = self.model.predict(x_test)
         predictions = self.scaler.inverse_transform(predictions)
-        logger.info('predictions.shape:' + str(predictions.shape))
+        #logger.info('predictions.shape:' + str(predictions.shape))
 
         # MSR(平均二乗差)
         self.msr = np.mean((predictions - y_test) ** 2)
 
-    def compile(self, delta_X, delta_Y):
-        logger.info('[' + str(self.code) + ']' + str(delta_X))
+    def compile(self, delta_X, delta_Y, last_date):
+        logger.info('compile [' + str(self.code) + ']' + str(delta_X))
         # 日数を結合
         self.days = pd.concat([self.days, delta_X])
         # どれくらいの期間をもとに予測するか
@@ -141,6 +152,7 @@ class model_3:
 
         # numpy arrayに変換
         x_train, y_train = np.array(x_train), np.array(y_train)
+        logger.info('[' + str(self.code) + ']x_train.shape:' + str(x_train.shape) + ' y_train.shape:' + str(y_train.shape))
         x_train = np.reshape(x_train, (x_train.shape[0], x_train.shape[1], 1))
 
         history = self.model.fit(x_train, y_train, batch_size=32, epochs=100, verbose=0)
@@ -169,6 +181,7 @@ class model_3:
 
         # MSR(平均二乗差)
         # self.msr = np.mean((predictions - y_test) ** 2)
+        self.last_date = last_date
         
     def predict(self, days):
         window_size = 60

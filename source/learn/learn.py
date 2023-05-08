@@ -52,10 +52,14 @@ def main():
         if os.path.exists(models_file_name):     # 差分のみ学習
             models = pd.read_pickle(models_file_name)
             # last_dateをもとに、差分を渡す
-            df_delta = df[df['timestamp'] > models[2].last_date]
-            for m in models:
-                m.compile(df_delta['day'], df_delta['close'])
+            df_delta = df[df['timestamp'] > models[0].last_date]
+            logger.info(str(df['code'].iloc[0]) + ' delta days:' + str(len(df_delta)))
+            if len(df_delta) > 0:
+                for m in models:
+                    m.compile(df_delta['day'], df_delta['close'], df['timestamp'])
         else:
+            logger.info('[' + str(df['code'].iloc[0]) + ']')
+            logger.info(df)
             try:
                 models = model.estimate(df, 'day', 'close')
             except Exception as e:

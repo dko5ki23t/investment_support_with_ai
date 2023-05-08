@@ -57,13 +57,14 @@ class model_2:
         # MSR(平均二乗差)
         self.msr = self.reg.score(X.to_numpy().reshape(-1, 1), Y)
 
-    def compile(self, delta_X, delta_Y):
+    def compile(self, delta_X, delta_Y, last_date):
         # 日数,終値を結合
         self.days = pd.concat([self.days, delta_X])
         self.Y = pd.concat([self.Y, delta_Y])
         self.reg.fit(self.days.to_numpy().reshape(-1, 1), self.Y)
         # MSR(平均二乗差)
         self.msr = self.reg.score(self.days.to_numpy().reshape(-1, 1), self.Y)
+        self.last_date = last_date
             
     def predict(self, days):
         first_day = self.days.iloc[0]
