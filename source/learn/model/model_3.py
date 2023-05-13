@@ -47,10 +47,14 @@ class model_3:
         self.stock = stock
         self.days = X
         self.last_date = last_date
+        self.model = None
 
         # データを0-1に正規化
         self.scaler = MinMaxScaler(feature_range=(0, 1))
         self.scaled_Y = self.scaler.fit_transform(Y)
+        self.first_compile(Y)
+
+    def first_compile(self, Y):
         # 全体の80%をトレーニングデータとして扱う
         training_data_len = int(np.ceil(len(Y) * .8))
         # どれくらいの期間をもとに予測するか
@@ -60,7 +64,7 @@ class model_3:
         if training_data_len <= window_size:
             self.msr = 10000
             logger.info('[' + str(self.code) + ']cannot learn because few data')
-            return
+            return False
 
         train_data = self.scaled_Y[0:int(training_data_len), :]
 
@@ -72,7 +76,6 @@ class model_3:
 
         # numpy arrayに変換
         x_train, y_train = np.array(x_train), np.array(y_train)
-        logger.info('[' + str(self.code) + ']x_train.shape:' + str(x_train.shape) + ' y_train.shape:' + str(y_train.shape))
         x_train = np.reshape(x_train, (x_train.shape[0], x_train.shape[1], 1))
 
         self.model = Sequential()
@@ -86,15 +89,15 @@ class model_3:
         self.model.add(Dropout(0.2))
         self.model.add(Dense(units=1))
 
-        print('compile start')
+        print('compile start (for the first time)')
         self.model.compile(optimizer='adam', loss='mean_squared_error')
         # TensorFlowのログを出力
         # 保存先ディレクトリがない場合は作成
-        import datetime
-        from pathlib import Path
-        dir_name = os.path.join(os.path.dirname(__file__), '../../../log/fit/', str(datetime.datetime.now().strftime("%Y%m%d-%H%M%S")))
-        dir = Path(dir_name)
-        dir.mkdir(parents=True, exist_ok=True)
+        #import datetime
+        #from pathlib import Path
+        #dir_name = os.path.join(os.path.dirname(__file__), '../../../log/fit/', str(datetime.datetime.now().strftime("%Y%m%d-%H%M%S")))
+        #dir = Path(dir_name)
+        #dir.mkdir(parents=True, exist_ok=True)
         #tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=dir_name, histogram_freq=1)
         #history = self.model.fit(x_train, y_train, batch_size=32, epochs=100, verbose=0, callbacks=[tensorboard_callback])
         history = self.model.fit(x_train, y_train, batch_size=32, epochs=100, verbose=0)
@@ -121,6 +124,7 @@ class model_3:
 
         # MSR(平均二乗差)
         self.msr = np.mean((predictions - y_test) ** 2)
+        return True
 
     def compile(self, delta_X, delta_Y, last_date):
         logger.info('compile [' + str(self.code) + ']' + str(delta_X))
@@ -138,6 +142,12 @@ class model_3:
         Y = np.concatenate([Y, delta_Y.to_numpy().reshape(-1, 1)])
         # データを0-1に正規化
         self.scaled_Y = self.scaler.fit_transform(Y)
+
+        if (self.model is None):
+            print('model is none')
+            self.first_compile(Y)
+            return
+
         # 渡された差分の100%をトレーニングデータとして扱う
         training_data_len = int(np.ceil(len(Y) * 1.0))
         #training_data_len = int(np.ceil(len(Y) * 1.0))

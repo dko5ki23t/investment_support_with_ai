@@ -80,8 +80,8 @@ def main():
         #    stock_name = str(df['stock name'].iloc[0])
     predict_results = predict_results[predict_results['price'] < int(args.now)]
     predict_results = predict_results.sort_values('gain', ascending=False)
-    logger.info(predict_results)
-    print(predict_results)
+    logger.info(predict_results.head(10))
+    print(predict_results.head(10))
     # 予想収益が多い順に、100株ずつ買っていく戦略
     print('Recommended purchase method:')
     balance = int(args.now)
