@@ -1,0 +1,8 @@
+; バッチファイルに読ませる、ディレクトリやファイルのパス
+; 半角スペースやタブでトークンに区切って解釈される。（各行2トークンまで）
+; (変数名) (値) ;(コメント：説明) で記述している。
+
+fetched_dir ../data/fetched_data                   ;株価データの格納場所
+learning_dir ../data/learning_data                 ;学習データの格納場所
+estimate_dir ../data/estimate_data                 ;予測/結果データの格納場所
+stockcode_csv ../data/stockcode/tosho_growth.csv   ;銘柄コードのファイル
