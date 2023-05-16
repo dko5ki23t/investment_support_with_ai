@@ -90,4 +90,14 @@
  * otosozai.com-free音素材(wav)-
 
    https://otosozai.com/se1_1.html
+
+ * Docker for Windowsで時刻ズレ対策 - Qiita
+
+   https://qiita.com/npkk/items/ebc31451bd604bc297c1
+
+ * [Linux(Ubuntu)]タイムゾーンを日本時間にする5つの方法まとめ
+
+  時刻ずれてると思ったらタイムゾーンが日本になってなかった(アホ)。
+
+  https://zenn.dev/kumamoto/articles/51bf0893620f0c
   

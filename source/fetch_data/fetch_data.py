@@ -101,11 +101,11 @@ def main():
                 stock_df['code'] = item['code']
                 stock_df['stock name'] = item['name']
                 break
-        logger.info(stock_df)
         stock_df.to_pickle(stock_file_name)
+        logger.info('complete fetching and save data : ' + str(stock_df['stock name'].iloc[0]))
     time_end = time.perf_counter()
     elapsed = time_end - time_begin
-    logger.info('fetch complete in ' + str(elapsed) + 's')
+    logger.info('fetch all data in ' + str(elapsed) + 's')
     # 完了通知
     #tk.Tk().withdraw()
     #messagebox.showinfo('message', 'fetch complete')
