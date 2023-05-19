@@ -38,7 +38,7 @@ class model_1:
         self : object
             Pipeline with fitted steps.
     """
-    def __init__(self, code, stock, X, Y, last_date):
+    def __init__(self, code, stock, X, Y, last_date: pd.Timestamp):
         self.name = 'model1'
         self.code = code
         self.stock = stock
@@ -57,7 +57,7 @@ class model_1:
         # MSR(平均二乗差)
         self.msr = self.reg.score(X.to_numpy().reshape(-1, 1), Y)
 
-    def compile(self, delta_X, delta_Y, last_date):
+    def compile(self, delta_X, delta_Y, last_date: pd.Timestamp):
         # 日数,終値を結合
         self.days = pd.concat([self.days, delta_X])
         self.Y = pd.concat([self.Y, delta_Y])

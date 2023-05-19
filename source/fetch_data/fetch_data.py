@@ -5,8 +5,7 @@ import argparse         # コマンドライン引数チェック用
 from pathlib import Path
 import os
 import math
-#import tkinter as tk
-#import tkinter.messagebox as messagebox
+from plyer import notification
 import tqdm
 import time
 
@@ -17,6 +16,10 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '../logger'))
 from logger import Logger
 logger = Logger(__name__, 'fetch_data.log')
 
+
+def add_date(row):
+    row['date'] = row['timestamp'].date()
+    return row
 
 # 目的変数を作成する
 def get_stockdata(code, period_type, period, freq_type, freq):
@@ -33,10 +36,10 @@ def get_stockdata(code, period_type, period, freq_type, freq):
         logger.error(e.message)
         return None
     # 株価をデータフレームに入れている
-    df_base = pd.DataFrame(symbol_data)
     df_base = pd.DataFrame(symbol_data.values(), index=symbol_data.keys()).T
     df_base.timestamp = pd.to_datetime(df_base.timestamp, unit='ms')
     df_base.index = pd.DatetimeIndex(df_base.timestamp, name='timestamp').tz_localize('UTC').tz_convert('Asia/Tokyo')
+    df_base = df_base.apply(add_date, axis=1)
     # NaNを含む行は消す(TODO:これでいいのか)
     df_base = df_base.dropna(how='any')
     df_base = df_base.reset_index(drop=True)
@@ -106,9 +109,11 @@ def main():
     time_end = time.perf_counter()
     elapsed = time_end - time_begin
     logger.info('fetch all data in ' + str(elapsed) + 's')
-    # 完了通知
-    #tk.Tk().withdraw()
-    #messagebox.showinfo('message', 'fetch complete')
+    # 完了通知 TODO:DockerコンテナならGUIを導入しないと
+#    notification.notify(
+#        title='fetch_data.py',
+#        message='fetch data complete'
+#    )
 
 if __name__ == "__main__":
     main()

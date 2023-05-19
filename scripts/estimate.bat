@@ -13,6 +13,6 @@ if "%3" == "" (
     exit /b
 )
 
-python ..\source\estimate\estimate.py -d %LEARNING_DIR% -t %1 -n %2 -g %3
+python ..\source\estimate\estimate.py -d %LEARNING_DIR% -t %1 -n %2 -g %3 -a %ESTIMATE_DIR%
 
 pause

@@ -41,7 +41,7 @@ class model_3:
         self : object
             Pipeline with fitted steps.
     """
-    def __init__(self, code, stock, X, Y, last_date):
+    def __init__(self, code, stock, X, Y, last_date: pd.Timestamp):
         self.name = 'model3'
         self.code = code
         self.stock = stock
@@ -126,7 +126,7 @@ class model_3:
         self.msr = np.mean((predictions - y_test) ** 2)
         return True
 
-    def compile(self, delta_X, delta_Y, last_date):
+    def compile(self, delta_X, delta_Y, last_date: pd.Timestamp):
         logger.info('compile [' + str(self.code) + ']' + str(delta_X))
         # 日数を結合
         self.days = pd.concat([self.days, delta_X])

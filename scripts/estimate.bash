@@ -8,4 +8,4 @@ if [ $# != 3 ]; then
     exit 1
 fi
 
-python ../source/estimate/estimate.py -d $LEARNING_DIR -t $1 -n $2 -g $3
+python ../source/estimate/estimate.py -d $LEARNING_DIR -t $1 -n $2 -g $3 -a $ESTIMATE_DIR

@@ -6,6 +6,7 @@ from yahoo_finance_api2 import share
 from yahoo_finance_api2.exceptions import YahooFinanceError
 import numpy as np
 import tqdm
+import datetime
 
 # 自作ロガー追加
 import sys
@@ -24,6 +25,7 @@ def set_argparse():
     parser.add_argument('-t', '--term', help='何回後の終値開示までに', required=True)
     parser.add_argument('-n', '--now', help='現在使える資金', required=True)
     parser.add_argument('-g', '--gain', help='目標のプラス額', required=True)
+    parser.add_argument('-a', '--analyze_dir', help='結果を保存するディレクトリ', required=True)
     args = parser.parse_args()
     return args
 
@@ -34,7 +36,9 @@ def main():
     files = glob.glob(args.dir + '/*.pkl')
     min_msr = 10000
     stock_name = ''
-    predict_results = pd.DataFrame(columns=['code', 'stock name', 'price', 'gain', 'msr'])
+    predict_results = pd.DataFrame(columns=['code', 'name', 'timestamp', 'date',
+                                            'model', 'price', 'term', 'predict',
+                                            'predict gain', 'actual', 'msr'])
     print('scanning learning data ...')
     for index in tqdm.tqdm(range(len(files))):
         file = files[index]
@@ -70,7 +74,11 @@ def main():
         # TODO:エラー発生時には無視する
         try:
             (days, predict_vals) = df[2].predict(1)
-            tmp_s = pd.Series([df[0].code, df[0].stock, now_val * 100, (predict_vals[-1] - now_val) * 100, df[2].msr], index=predict_results.columns)
+            tmp_s = pd.Series(
+                [df[0].code, df[0].stock, pd.Timestamp.now(), pd.Timestamp.now().date(),
+                 df[2].name, now_val, int(args.term), predict_vals[-1],
+                 (predict_vals[-1] - now_val), np.nan, df[2].msr],
+                 index=predict_results.columns)
         except Exception as e:
             continue
         predict_results = pd.concat([predict_results, pd.DataFrame(data=tmp_s.values.reshape(1, -1), columns=predict_results.columns)])
@@ -78,8 +86,20 @@ def main():
         #if min_msr > min_tmp:
         #    min_msr = min_tmp
         #    stock_name = str(df['stock name'].iloc[0])
-    predict_results = predict_results[predict_results['price'] < int(args.now)]
-    predict_results = predict_results.sort_values('gain', ascending=False)
+    # predict_resultsには全銘柄の予想値が入っている。モデルの予想的中率を知るために保存する。
+    # 保存先ディレクトリがない場合は作成
+    dir = Path(args.analyze_dir)
+    dir.mkdir(parents=True, exist_ok=True)
+    export_results = predict_results
+    analyze_file_name = str(args.analyze_dir) + '/analyze_term_' + str(args.term) + '.pkl'
+    # 既存のファイルがあればそのdataframeに追加
+    if os.path.exists(analyze_file_name):
+        past_results = pd.read_pickle(analyze_file_name)
+        export_results = pd.concat([past_results, predict_results])
+    export_results.to_pickle(analyze_file_name)
+
+    predict_results = predict_results[predict_results['price'] < int(args.now) / 100]
+    predict_results = predict_results.sort_values('predict gain', ascending=False)
     logger.info(predict_results.head(10))
     print(predict_results.head(10))
     # 予想収益が多い順に、100株ずつ買っていく戦略
@@ -92,7 +112,7 @@ def main():
         if price > balance:
             break
         idx += 1
-        print(idx, look['code'], look['stock name'], 'Expected revenue:', (look['gain'] * 100 - price))
+        print(idx, look['code'], look['name'], 'Expected revenue:', (look['predict gain'] * 100))
         balance -= price
     
 
