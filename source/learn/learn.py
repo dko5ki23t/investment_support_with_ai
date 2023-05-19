@@ -5,9 +5,6 @@ import glob
 from pathlib import Path
 import tqdm
 import time
-#import wave
-#import struct
-#import pyaudio
 
 # 自作ロガー追加
 import sys
@@ -25,18 +22,6 @@ def set_argparse():
 
 def main():
     args = set_argparse()
-    # 学習完了音ファイル読み込み
-    #sound_file_name = os.path.join(os.path.dirname(__file__), 'se_sad03.wav')
-    #sound_file = wave.open(sound_file_name, mode='rb')
-    # ストリーム作成
-    #p = pyaudio.PyAudio() # pyaudioのインスタンス化
-    #stream = p.open(
-    #    format = p.get_format_from_width(sound_file.getsampwidth()),
-    #    channels = sound_file.getnchannels(),
-    #    rate = sound_file.getframerate(),
-    #    output = True
-    #    )
-    #chunk = 1024
     # ファイル読み込み
     files = glob.glob(args.dir + '/*.pkl')
     # 保存先ディレクトリがない場合は作成
@@ -56,7 +41,7 @@ def main():
             logger.info(str(df['code'].iloc[0]) + ' delta days:' + str(len(df_delta)))
             if len(df_delta) > 0:
                 for m in models:
-                    m.compile(df_delta['day'], df_delta['close'], df['timestamp'])
+                    m.compile(df_delta['day'], df_delta['close'], df['timestamp'].iloc[-1])
         else:
             logger.info('[' + str(df['code'].iloc[0]) + ']')
             logger.info(df)
@@ -70,13 +55,6 @@ def main():
     time_end = time.perf_counter()
     elapsed = time_end - time_begin
     logger.info('learn complete in ' + str(elapsed) + 's')
-    #sound_file.rewind()
-    #sound_data = sound_file.readframes(chunk) #chunk分（1024個分）のフレーム（音の波形のデータ）を読み込む。
-    #while sound_data:
-    #    stream.write(sound_data) #ストリームにデータを書き込むことで音を鳴らす。
-    #    sound_data = sound_file.readframes(chunk) #新しくchunk分のフレームを読み込む。    
-    #stream.close() #ストリームを閉じる。
-    #p.terminate() #PyAudioを閉じる。
 
 if __name__ == "__main__":
     main()
