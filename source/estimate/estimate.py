@@ -72,16 +72,17 @@ def main():
         # TODO:より良いMSRを出したモデルを取得
         # とりあえず今はRNNのモデルを選択
         # TODO:エラー発生時には無視する
-        try:
-            (days, predict_vals) = df[2].predict(1)
-            tmp_s = pd.Series(
-                [df[0].code, df[0].stock, pd.Timestamp.now(), pd.Timestamp.now().date(),
-                 df[2].name, now_val, int(args.term), predict_vals[-1],
-                 (predict_vals[-1] - now_val), np.nan, df[2].msr],
-                 index=predict_results.columns)
-        except Exception as e:
-            continue
-        predict_results = pd.concat([predict_results, pd.DataFrame(data=tmp_s.values.reshape(1, -1), columns=predict_results.columns)])
+        for model in df:
+            try:
+                (days, predict_vals) = model.predict(1)
+                tmp_s = pd.Series(
+                    [model.code, model.stock, pd.Timestamp.now(), pd.Timestamp.now().date(),
+                    model.name, now_val, int(args.term), predict_vals[-1],
+                    (predict_vals[-1] - now_val), np.nan, model.msr],
+                    index=predict_results.columns)
+            except Exception as e:
+                continue
+            predict_results = pd.concat([predict_results, pd.DataFrame(data=tmp_s.values.reshape(1, -1), columns=predict_results.columns)])
         
         #if min_msr > min_tmp:
         #    min_msr = min_tmp
@@ -93,12 +94,17 @@ def main():
     export_results = predict_results
     analyze_file_name = str(args.analyze_dir) + '/analyze_term_' + str(args.term) + '.pkl'
     # 既存のファイルがあればそのdataframeに追加
+    # TODO:今のままだと同じ日に2回estimateすると2つのデータができてしまう
     if os.path.exists(analyze_file_name):
         past_results = pd.read_pickle(analyze_file_name)
         export_results = pd.concat([past_results, predict_results])
     export_results.to_pickle(analyze_file_name)
 
+    # 引数で指定された額に収まる銘柄のみ抽出
     predict_results = predict_results[predict_results['price'] < int(args.now) / 100]
+    # model3(RNN)のみ抽出
+    predict_results = predict_results[predict_results['model'] == 'model3']
+    # 予想損益の多い順に並べ替え
     predict_results = predict_results.sort_values('predict gain', ascending=False)
     logger.info(predict_results.head(10))
     print(predict_results.head(10))

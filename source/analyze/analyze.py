@@ -56,7 +56,6 @@ def main():
         analyze_df = analyze_df.apply(set_actual, args=(fetched_df_dict,), axis=1)
         # 出力
         analyze_df.to_pickle(analyze_file)
-        logger.info(analyze_df)
 
 if __name__ == "__main__":
     main()
