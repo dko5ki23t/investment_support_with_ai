@@ -19,6 +19,12 @@
 
    https://github.com/pyenv-win/pyenv-win
 
+ * PythonでKerasのLSTMを用いて、複数の情報を基に株価の予測を試してみた - リラックスした生活を過ごすために
+
+   機械学習の説明変数を複数にする際の参考にした。
+
+   https://relaxing-living-life.com/147/
+
 ### GPU使用
  * 機械学習時にGPUを認識してくれなくて、とっても困っている人向けの記事 | by Yutaka_kun | LSC PSD | Medium
 
@@ -54,7 +60,30 @@
 
    https://astherier.com/blog/2020/08/run-gui-apps-on-wsl2/
 
+### TensorFlow Cloud(TODO: とりあえず全部載せてるから不要なものは削除)
+
+ * TensorFlow Cloud を使用した Keras モデルのトレーニング  |  TensorFlow Core
+
+   https://www.tensorflow.org/guide/keras/training_keras_models_on_cloud?hl=ja
+
+ * スタートガイド: Keras によるトレーニングと予測  |  AI Platform  |  Google Cloud
+
+   https://cloud.google.com/ai-platform/docs/getting-started-keras?hl=ja#set_up_your_project
+
+ * 割り当てポリシー  |  AI Platform Training  |  Google Cloud
+
+   https://cloud.google.com/ai-platform/training/docs/quotas?hl=ja
+
+ * 割り当てポリシー  |  AI Platform Training  |  Google Cloud
+
+   https://cloud.google.com/ai-platform/training/docs/quotas?hl=ja#requesting_a_quota_increase
+
+ * GCP AI platform training cannot use full GPU quota - Stack Overflow
+
+   https://stackoverflow.com/questions/59689382/gcp-ai-platform-training-cannot-use-full-gpu-quota
+
 ### 株価データ取得
+
  * 株情報を取得するAPIどれが良い - Qiita
 
    https://qiita.com/passive-radio/items/cf3740f9601675b0a8dd
@@ -79,6 +108,22 @@
    銘柄コードの取得のために参考にした。
 
    https://qiita.com/higebobo/items/0ec7e243c79c0b5488bb
+
+ * 日経平均株価をAPIで取得する2～pythonで取得できた～｜うずまき
+
+   日経平均株価を取得するには銘柄コードを'^N225'にすればいいだけだった。
+
+   https://note.com/uzumaki160123/n/necdbe0733219
+
+ * Pythonから金融庁のEDINET APIを使って有価証券報告書を取得する
+
+   決算日情報を学習に使うために参考にした。
+
+   https://segakuin.com/python/edinet.html
+
+ * EDINET
+
+   https://disclosure2.edinet-fsa.go.jp/WEEK0010.aspx
 
 ### その他
  * pythonで音を鳴らす方法を詳しめに解説 - Qiita

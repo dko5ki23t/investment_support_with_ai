@@ -24,6 +24,11 @@ def add_date(row):
 # 目的変数を作成する
 def get_stockdata(code, period_type, period, freq_type, freq):
     company_code = str(code) + '.T'
+    
+    return get_stockdata_(company_code, period_type, period, freq_type, freq)
+
+# 目的変数を作成する
+def get_stockdata_(company_code, period_type, period, freq_type, freq):
     my_share = share.Share(company_code)
     symbol_data = None
 
@@ -44,8 +49,51 @@ def get_stockdata(code, period_type, period, freq_type, freq):
     df_base = df_base.dropna(how='any')
     df_base = df_base.reset_index(drop=True)
     
-    
     return df_base
+
+def fetch_nikkei(out_dir:str):
+    code = '^N225'
+    name = '日経平均株価'
+    stock_file_name = out_dir + '/N225.pkl'
+    stock_df = pd.DataFrame
+    # 既に株価情報ファイルが存在するか確認
+    if os.path.exists(stock_file_name):     # 差分のみ取得
+        stock_df = pd.read_pickle(stock_file_name)
+        diff_days = (pd.Timestamp.now().date() - stock_df['date'].iloc[-1]).days
+        ret = get_stockdata_(code, share.PERIOD_TYPE_DAY, diff_days, share.FREQUENCY_TYPE_DAY, 1)
+        # 結合するが、日が変わっていないデータは捨てる
+        stock_df = pd.concat([stock_df, ret], ignore_index=True)
+        stock_df = stock_df.sort_values('timestamp')
+        prev_date = pd.Timestamp(1900,1,1).date()
+        drops = []
+        for i in range(len(stock_df)):
+            stamp = stock_df.iloc[i]['date']
+            if stamp == prev_date: # 同じ日
+                drops.append(stock_df.index[i - 1])
+            prev_date = stamp
+        stock_df = stock_df.drop(drops)
+        stock_df.reset_index()
+        stock_df['day'] = range(0, len(stock_df))
+        stock_df['real/model'] = 'real'
+        stock_df['code'] = code
+        stock_df['stock name'] = name
+    else:                                   # 全取得
+        # エラーが出ない範囲で、最も長い期間で指定して取得する
+        # TODO:マシな方法ない？
+        for i in range(100, 0, -1):
+            try:
+                ret = get_stockdata_(
+                    code, share.PERIOD_TYPE_YEAR, i, share.FREQUENCY_TYPE_DAY, 1)    # i年前まで、1日ごとに取得
+            except Exception as e:
+                continue
+            stock_df = ret
+            stock_df['day'] = range(0, len(stock_df))
+            stock_df['real/model'] = 'real'
+            stock_df['code'] = code
+            stock_df['stock name'] = name
+            break
+    stock_df.to_pickle(stock_file_name)
+    logger.info('complete fetching and save data : ' + str(stock_df['stock name'].iloc[0]))
 
 def set_argparse():
     parser = argparse.ArgumentParser(description='TODO')
@@ -63,6 +111,9 @@ def main():
     dir = Path(args.out_dir)
     dir.mkdir(parents=True, exist_ok=True)
     time_begin = time.perf_counter()
+    # 日経平均株価取得
+    fetch_nikkei(args.out_dir)
+    # 各銘柄取得
     for index in tqdm.tqdm(range(len(df))):
         item = df.iloc[index]
         stock_file_name = str(args.out_dir) + '/' + str(item['code']) + '.pkl'

@@ -6,7 +6,7 @@ from yahoo_finance_api2 import share
 from yahoo_finance_api2.exceptions import YahooFinanceError
 import numpy as np
 import tqdm
-import datetime
+import pickle
 
 # 自作ロガー追加
 import sys
@@ -22,10 +22,12 @@ import model
 def set_argparse():
     parser = argparse.ArgumentParser(description='TODO')
     parser.add_argument('-d', '--dir', help='機械学習の統計データがあるディレクトリ', required=True)
-    parser.add_argument('-t', '--term', help='何回後の終値開示までに', required=True)
+    parser.add_argument('-t', '--term', help='何回後の終値開示までに', type=int, required=True)
     parser.add_argument('-n', '--now', help='現在使える資金', required=True)
     parser.add_argument('-g', '--gain', help='目標のプラス額', required=True)
     parser.add_argument('-a', '--analyze_dir', help='結果を保存するディレクトリ', required=True)
+    parser.add_argument('-u', '--use_existing', help='株価を実行中に取得せず、既存データを使う', action='store_true')
+    parser.add_argument('-f', '--fetched_dir', help='株価の既存データ')
     args = parser.parse_args()
     return args
 
@@ -39,10 +41,28 @@ def main():
     predict_results = pd.DataFrame(columns=['code', 'name', 'timestamp', 'date',
                                             'model', 'price', 'term', 'predict',
                                             'predict gain', 'actual', 'msr'])
+    
+    fetched_df_dict = {}
+    if args.use_existing == True:   # 現在の株価を既存データから取得
+        # 株価データファイル読み込み
+        fetched_files = glob.glob(args.fetched_dir + '/*.pkl')
+        # 日経平均株価は除外
+        fetched_files = [e for e in fetched_files if not e.endswith('N225.pkl')]
+        # 銘柄コードとデータフレームのdictにする
+        print('(1/2)read and construct fetched data ...')
+        for i in tqdm.tqdm(range(len(fetched_files))):
+            fetched_file = fetched_files[i]
+            fetched_df = pd.read_pickle(fetched_file)
+            fetched_df_dict[int(fetched_df['code'].iloc[0])] = fetched_df
+    
     print('scanning learning data ...')
     for index in tqdm.tqdm(range(len(files))):
         file = files[index]
-        df = pd.read_pickle(file)
+        f = open(file, 'rb')
+        models = pickle.load(f)
+        f.close
+#        df = pd.read_pickle(file)
+        meta_data = models.pop(0)
         # 銘柄情報出力
         #logger.info(str(df[0].code) + ':' + str(df[0].stock))
         #for model in df:
@@ -50,29 +70,36 @@ def main():
         #    logger.info(str(model.name) + ' val:' + str(predict_vals[-1]) + ' msr:' + str(model.msr))
         #min_tmp = df['MSR'].min()
         #min_idx = df['MSR'].idxmin()
-        # 現在の株価取得(TODO:最新とは言えなさそう？ & 値がnanになることあり)
-        company_code = str(df[0].code) + '.T'
-        my_share = share.Share(company_code)
-        symbol_data = None
 
-        # TODO:エラー発生時の対処として、リトライもあり？
-        try:
-            symbol_data = my_share.get_historical(share.PERIOD_TYPE_DAY,
-                                                1,
-                                                share.FREQUENCY_TYPE_MINUTE,
-                                                1)
-        except YahooFinanceError as e:
-            logger.error(e.message)
-            continue
-        # symbol_dataがNoneの場合あり。それは無視する
-        if symbol_data is None:
-            continue
-        df_now = pd.DataFrame(symbol_data.values(), index=symbol_data.keys()).T
-        now_val = df_now['close'].iloc[-1]
+        now_val = float()
+        if args.use_existing == True:   # 現在の株価を既存データから取得
+            fetched_df = fetched_df_dict[meta_data['code']]
+            now_val = fetched_df['close'].iloc[-1]      # 最新の終値を現在の株価とする
+        else:
+            # 現在の株価取得(TODO:最新とは言えなさそう？ & 値がnanになることあり)
+            company_code = str(meta_data['code']) + '.T'
+            my_share = share.Share(company_code)
+            symbol_data = None
+
+            # TODO:エラー発生時の対処として、リトライもあり？
+            try:
+                symbol_data = my_share.get_historical(share.PERIOD_TYPE_DAY,
+                                                    1,
+                                                    share.FREQUENCY_TYPE_MINUTE,
+                                                    1)
+            except YahooFinanceError as e:
+                logger.error(e.message)
+                continue
+            # symbol_dataがNoneの場合あり。それは無視する
+            if symbol_data is None:
+                logger.info('cannot get current price of ' + company_code)
+                continue
+            df_now = pd.DataFrame(symbol_data.values(), index=symbol_data.keys()).T
+            now_val = df_now['close'].iloc[-1]
         # TODO:より良いMSRを出したモデルを取得
         # とりあえず今はRNNのモデルを選択
         # TODO:エラー発生時には無視する
-        for model in df:
+        for model in models:
             try:
                 (days, predict_vals) = model.predict(1)
                 tmp_s = pd.Series(
