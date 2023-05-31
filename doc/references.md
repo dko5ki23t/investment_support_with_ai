@@ -25,6 +25,10 @@
 
    https://relaxing-living-life.com/147/
 
+ * 無から始めるKeras - Qiita
+
+   https://qiita.com/Ishotihadus/items/6ecf5684c2cbaaa6a5ef
+
 ### GPU使用
  * 機械学習時にGPUを認識してくれなくて、とっても困っている人向けの記事 | by Yutaka_kun | LSC PSD | Medium
 

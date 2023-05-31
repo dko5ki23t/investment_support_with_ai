@@ -5,7 +5,7 @@ import argparse         # コマンドライン引数チェック用
 from pathlib import Path
 import os
 import math
-from plyer import notification
+#from plyer import notification
 import tqdm
 import time
 

@@ -4,3 +4,4 @@ FETCHED_DIR="../data/fetched_data"                   # 株価データの格納�
 LEARNING_DIR="../data/learning_data"                 # 学習データの格納場所
 ESTIMATE_DIR="../data/estimate_data"                 # 予測/結果データの格納場所
 STOCKCODE_CSV="../data/stockcode/tosho_growth.csv"   # 銘柄コードのファイル
+SANDBOX_DIR="../data/sandbox"                        # 予測/結果データを過去にさかのぼって取得するための作業場所

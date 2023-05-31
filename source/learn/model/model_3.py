@@ -1,12 +1,12 @@
 import pandas as pd
 import numpy as np
 import os
-os.environ['TF_CPP_MIN_LOG_LEVEL']='2'   # TensorFlowの警告を出力しない
+#os.environ['TF_CPP_MIN_LOG_LEVEL']='2'   # TensorFlowの警告を出力しない
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import MinMaxScaler
 from keras.models import Sequential
 from keras.layers import Dense, LSTM, Dropout
-#import tensorflow as tf
+import tensorflow as tf
 #tf.debugging.set_log_device_placement(True)
 
 # 自作ロガー追加
@@ -41,13 +41,13 @@ class model_3:
         self : object
             Pipeline with fitted steps.
     """
-    def __init__(self, code, stock, X, Y, last_date: pd.Timestamp, *discard):
+    def __init__(self, code, stock, X, Y, last_date: pd.Timestamp, dir: str, *discard):
         self.name = 'model3'
         self.code = code
         self.stock = stock
         self.days = X
         self.last_date = last_date
-        self.model = None
+        self.modelfile = dir + '/' + str(code) + '_' + self.name
 
         # データを0-1に正規化
         self.scaler = MinMaxScaler(feature_range=(0, 1))
@@ -78,19 +78,19 @@ class model_3:
         x_train, y_train = np.array(x_train), np.array(y_train)
         x_train = np.reshape(x_train, (x_train.shape[0], x_train.shape[1], 1))
 
-        self.model = Sequential()
-        self.model.add(LSTM(units=50,return_sequences=True,input_shape=(x_train.shape[1], 1)))
-        self.model.add(Dropout(0.2))
-        self.model.add(LSTM(units=50,return_sequences=True))
-        self.model.add(Dropout(0.2))
-        self.model.add(LSTM(units=50,return_sequences=True))
-        self.model.add(Dropout(0.2))
-        self.model.add(LSTM(units=50))
-        self.model.add(Dropout(0.2))
-        self.model.add(Dense(units=1))
+        model = Sequential()
+        model.add(LSTM(units=50,return_sequences=True,input_shape=(x_train.shape[1], 1)))
+        model.add(Dropout(0.2))
+        model.add(LSTM(units=50,return_sequences=True))
+        model.add(Dropout(0.2))
+        model.add(LSTM(units=50,return_sequences=True))
+        model.add(Dropout(0.2))
+        model.add(LSTM(units=50))
+        model.add(Dropout(0.2))
+        model.add(Dense(units=1))
 
         print('compile start (for the first time)')
-        self.model.compile(optimizer='adam', loss='mean_squared_error')
+        model.compile(optimizer='adam', loss='mean_squared_error')
         # TensorFlowのログを出力
         # 保存先ディレクトリがない場合は作成
         #import datetime
@@ -99,8 +99,8 @@ class model_3:
         #dir = Path(dir_name)
         #dir.mkdir(parents=True, exist_ok=True)
         #tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=dir_name, histogram_freq=1)
-        #history = self.model.fit(x_train, y_train, batch_size=32, epochs=100, verbose=0, callbacks=[tensorboard_callback])
-        history = self.model.fit(x_train, y_train, batch_size=32, epochs=100, verbose=0)
+        #history = model.fit(x_train, y_train, batch_size=32, epochs=100, verbose=0, callbacks=[tensorboard_callback])
+        history = model.fit(x_train, y_train, batch_size=32, epochs=100, verbose=0)
         
         # テストデータ(残り20%)作成
         test_data = self.scaled_Y[training_data_len - window_size:, :]
@@ -118,12 +118,15 @@ class model_3:
         #logger.info('x_test.shape:' + str(x_test.shape))
         #logger.info('y_test.shape:' + str(y_test.shape))
         
-        predictions = self.model.predict(x_test)
+        predictions = model.predict(x_test)
         predictions = self.scaler.inverse_transform(predictions)
         #logger.info('predictions.shape:' + str(predictions.shape))
 
         # MSR(平均二乗差)
         self.msr = np.mean((predictions - y_test) ** 2)
+
+        # モデル保存
+        model.save(self.modelfile)
         return True
 
     def compile(self, delta_X, delta_Y, last_date: pd.Timestamp, *discard):
@@ -143,7 +146,9 @@ class model_3:
         # データを0-1に正規化
         self.scaled_Y = self.scaler.fit_transform(Y)
 
-        if (self.model is None):
+        # モデル読み込み
+        model = tf.keras.models.load_model(self.modelfile)
+        if (model is None):
             print('model is none')
             self.first_compile(Y)
             return
@@ -165,8 +170,11 @@ class model_3:
         logger.info('[' + str(self.code) + ']x_train.shape:' + str(x_train.shape) + ' y_train.shape:' + str(y_train.shape))
         x_train = np.reshape(x_train, (x_train.shape[0], x_train.shape[1], 1))
 
-        history = self.model.fit(x_train, y_train, batch_size=32, epochs=100, verbose=0)
+        history = model.fit(x_train, y_train, batch_size=32, epochs=100, verbose=0)
         
+        # モデル保存
+        model.save(self.modelfile)
+
         '''
         # テストデータ(残り20%)作成
         test_data = self.scaled_Y[training_data_len - window_size:, :]
@@ -202,7 +210,9 @@ class model_3:
             x_test.append(test_data[i-window_size:i, 0])
         x_test = np.array(x_test)
         x_test = np.reshape(x_test, (x_test.shape[0], x_test.shape[1], 1))
-        predictions = self.model.predict(x_test)
+        # モデル読み込み
+        model = tf.keras.models.load_model(self.modelfile)
+        predictions = model.predict(x_test)
         # モデルの予想値を含めて作成
         for i in range(len(test_data) + 1, len(test_data) + days):
             test_data = np.append(test_data, predictions[-1])
@@ -211,7 +221,7 @@ class model_3:
             x_test_one.append(test_data[i-window_size:i, 0])
             x_test_one = np.array(x_test_one)
             x_test_one = np.reshape(x_test_one, (x_test_one.shape[0], x_test_one.shape[1], 1))
-            predictions = np.append(predictions, self.model.predict(x_test_one))
+            predictions = np.append(predictions, model.predict(x_test_one))
             predictions = np.reshape(predictions, (predictions.shape[0], 1))
         logger.info('predictions.shape:' + str(predictions.shape))
         # 正規化を元に戻す

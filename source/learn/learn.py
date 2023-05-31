@@ -48,15 +48,18 @@ def main():
             logger.info(str(df['code'].iloc[0]) + ' delta days:' + str(len(df_delta)))
             if len(df_delta) > 0:
                 for m in models:
-                    m.compile(df_delta['day'], df_delta['close'], df['timestamp'].iloc[-1])
+                    # TODO: compileに渡す引数を統一
+                    if m.name == 'model5':
+                        m.compile(df_delta['day'], df_delta[['close', 'high', 'volume']].to_numpy(copy=True), df['timestamp'].iloc[-1])
+                    else:
+                        m.compile(df_delta['day'], df_delta['close'], df['timestamp'].iloc[-1])
             models.insert(0, meta_data)
         else:
             logger.info('[' + str(df['code'].iloc[0]) + ']')
             logger.info(df)
             try:
-                models = model.estimate(df, nikkei_df)
+                models = model.estimate(df, nikkei_df, str(args.out_dir))
             except Exception as e:
-                logger.error(e)
                 continue
         # 学習結果の保存
         f = open(models_file_name, 'wb')
