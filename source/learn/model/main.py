@@ -3,6 +3,7 @@ from . import model_2
 from . import model_3
 from . import model_4
 from . import model_5
+from . import model_6
 import pandas as pd
 
 # 自作ロガー追加
@@ -53,14 +54,17 @@ def estimate(data: pd.DataFrame, nikkei: pd.DataFrame, dir: str):
     model2 = model_2.model_2(
         code, name, days, closes, last_timestamp
     )
-    model3 = model_3.model_3(
-        code, name, days, data.filter(['close']).values, last_timestamp, dir
-    )
+#    model3 = model_3.model_3(
+#        code, name, days, data.filter(['close']).values, last_timestamp, dir
+#    )
 #    model4 = model_4.model_4(
 #        code, name, days, data_nikkei.to_numpy(copy=True), last_timestamp,
 #    )
-    model5 = model_5.model_5(
-        code, name, days, data[['close', 'high', 'volume']].to_numpy(copy=True), last_timestamp, dir
+#    model5 = model_5.model_5(
+#        code, name, days, data[['close', 'high', 'volume']].to_numpy(copy=True), last_timestamp, dir
+#    )
+    model6 = model_6.model_6(
+        code, name, days, closes, last_timestamp, dir
     )
-    return [meta_data, model1, model2, model3, model5]
+    return [meta_data, model1, model2, model6]
     #return [meta_data, model5]

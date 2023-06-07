@@ -128,7 +128,7 @@ https://www.tensorflow.org/install/source?hl=ja#gpu を参考に、TensorFlowに
 
    * keras - **2.6.0** (https://stackoverflow.com/questions/72255562/cannot-import-name-dtensor-from-tensorflow-compat-v2-experimental)
 
-   * protobuf - **3.20.1** (https://masaki-note.com/2022/05/29/protobuf_downgrade/)
+   * protobuf - **3.20.3** (https://masaki-note.com/2022/05/29/protobuf_downgrade/)
 
    * pandas - **1.3.5**
 
@@ -137,3 +137,11 @@ https://www.tensorflow.org/install/source?hl=ja#gpu を参考に、TensorFlowに
    * tqdm - 4.65.0
 
    * yahoo-finance-api2 - 0.0.12
+
+### その他
+
+* 環境変数Pathに以下を追加(https://github.com/tensorflow/tensorflow/issues/50273)
+
+  ```
+  C:\Program Files\NVIDIA Corporation\Nsight Systems 2020.4.3\target-windows-x64
+  ```

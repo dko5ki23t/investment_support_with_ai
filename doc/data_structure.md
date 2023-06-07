@@ -22,7 +22,7 @@ DataFrame(pickle化)
 
 | カラム名 | 型 | 説明・補足 |
 | ---- | ---- | ---- |
-| code | numpy.int64 | 銘柄コード |
+| code | str | 銘柄コード。日経平均株価が^N255のため、intではなくstrとする |
 | name | str | 銘柄名 |
 | timestamp | pandas._libs.tslibs.timestamps.Timestamp | 対象時刻のタイムスタンプ |
 | date | datetime.date | 対象の日時(日時のみの比較に使うとき便利なため) |

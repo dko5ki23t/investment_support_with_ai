@@ -7,6 +7,8 @@ from yahoo_finance_api2.exceptions import YahooFinanceError
 import numpy as np
 import tqdm
 import pickle
+import time
+from plyer import notification
 
 # 自作ロガー追加
 import sys
@@ -37,11 +39,11 @@ def main():
     # ファイル読み込み
     files = glob.glob(args.dir + '/*.pkl')
     min_msr = 10000
-    stock_name = ''
     predict_results = pd.DataFrame(columns=['code', 'name', 'timestamp', 'date',
                                             'model', 'price', 'term', 'predict',
                                             'predict gain', 'actual', 'msr'])
     
+    time_begin = time.perf_counter()
     fetched_df_dict = {}
     # 株価データファイル読み込み
     fetched_files = glob.glob(args.fetched_dir + '/*.pkl')
@@ -54,25 +56,17 @@ def main():
         fetched_df = pd.read_pickle(fetched_file)
         fetched_df_dict[int(fetched_df['code'].iloc[0])] = fetched_df
     
-    print('scanning learning data ...')
+    print('(2/2)scan learning data and estimate ...')
     for index in tqdm.tqdm(range(len(files))):
         file = files[index]
         f = open(file, 'rb')
         models = pickle.load(f)
         f.close
-#        df = pd.read_pickle(file)
         meta_data = models.pop(0)
-        # 銘柄情報出力
-        #logger.info(str(df[0].code) + ':' + str(df[0].stock))
-        #for model in df:
-        #    (days, predict_vals) = model.predict(1)
-        #    logger.info(str(model.name) + ' val:' + str(predict_vals[-1]) + ' msr:' + str(model.msr))
-        #min_tmp = df['MSR'].min()
-        #min_idx = df['MSR'].idxmin()
 
         now_val = float()
         if args.use_existing == True:   # どの株も、現在の株価を既存データから取得(Web API使わない)
-            fetched_df = fetched_df_dict[meta_data['code']]
+            fetched_df = fetched_df_dict[int(meta_data['code'])]
             now_val = fetched_df['close'].iloc[-1]      # 最新の終値を現在の株価とする
         else:
             # 現在の株価取得(TODO:最新とは言えなさそう？ & 値がnanになることあり)
@@ -88,10 +82,17 @@ def main():
                                                     1)
             except YahooFinanceError as e:
                 logger.error(e.message)
-            # symbol_dataがNoneの場合あり。その場合は最新の終値を現在の株価とする
+            # symbol_dataがNoneの場合あり
+            # その場合は最新の終値を現在の株価とする
             if symbol_data is None:
                 logger.info('cannot get current price of ' + company_code)
-                fetched_df = fetched_df_dict[meta_data['code']]
+                # TODO:原因見つけて直す
+                try:
+                    fetched_df = fetched_df_dict[int(meta_data['code'])]
+                except Exception as e:
+                    logger.info('TODO:原因見つけて直す')
+                    logger.error(e)
+                    continue
                 now_val = fetched_df['close'].iloc[-1]      # 最新の終値を現在の株価とする
             else:
                 df_now = pd.DataFrame(symbol_data.values(), index=symbol_data.keys()).T
@@ -132,13 +133,18 @@ def main():
     # 引数で指定された額に収まる銘柄のみ抽出
     predict_results = predict_results[predict_results['price'] < int(args.now) / 100]
     # model3(RNN)のみ抽出
-    predict_results = predict_results[predict_results['model'] == 'model3']
+    #predict_results = predict_results[predict_results['model'] == 'model3']
     # model4(RNN)のみ抽出
     #predict_results = predict_results[predict_results['model'] == 'model5']
+    # model6(RNN)のみ抽出
+    predict_results = predict_results[predict_results['model'] == 'model6']
     # 予想損益の多い順に並べ替え
     predict_results = predict_results.sort_values('predict gain', ascending=False)
-    logger.info(predict_results.head(10))
-    print(predict_results.head(10))
+    view_len = len(predict_results)
+    if view_len > 10:
+        view_len = 10
+    logger.info(predict_results.head(view_len))
+    print(predict_results.head(view_len))
     # 予想収益が多い順に、100株ずつ買っていく戦略
     print('Recommended purchase method:')
     balance = int(args.now)
@@ -151,6 +157,16 @@ def main():
         idx += 1
         print(idx, look['code'], look['name'], 'Expected revenue:', (look['predict gain'] * 100))
         balance -= price
+    time_end = time.perf_counter()
+    elapsed = time_end - time_begin
+    logger.info('estimate complete in ' + str(elapsed) + 's')
+    # 完了通知
+    notification.notify(
+        title="complete estimating",
+        message="complete estimating",
+        app_name="estimate.py",
+        timeout=10
+    )
 
 
 if __name__ == "__main__":

@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import os
 #os.environ['TF_CPP_MIN_LOG_LEVEL']='2'   # TensorFlowの警告を出力しない
+os.environ['TF_GPU_THREAD_MODE'] = 'gpu_private' # GPU占有化
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import MinMaxScaler
 from keras.models import Sequential
@@ -47,7 +48,7 @@ class model_3:
         self.stock = stock
         self.days = X
         self.last_date = last_date
-        self.modelfile = dir + '/' + str(code) + '_' + self.name
+        self.modelfile = dir + '/models/' + str(code) + '_' + self.name
 
         # データを0-1に正規化
         self.scaler = MinMaxScaler(feature_range=(0, 1))
@@ -90,7 +91,7 @@ class model_3:
         model.add(Dense(units=1))
 
         print('compile start (for the first time)')
-        model.compile(optimizer='adam', loss='mean_squared_error')
+        model.compile(optimizer='adam', loss='mean_squared_error', metrics=['accuracy'])
         # TensorFlowのログを出力
         # 保存先ディレクトリがない場合は作成
         #import datetime
@@ -98,7 +99,11 @@ class model_3:
         #dir_name = os.path.join(os.path.dirname(__file__), '../../../log/fit/', str(datetime.datetime.now().strftime("%Y%m%d-%H%M%S")))
         #dir = Path(dir_name)
         #dir.mkdir(parents=True, exist_ok=True)
-        #tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=dir_name, histogram_freq=1)
+        #profile_start_step = int(x_train.shape[0] * 1.5)
+        #tensorboard_callback = tf.keras.callbacks.TensorBoard(
+        #    log_dir=dir_name,
+        #    histogram_freq=1,
+        #    profile_batch='100, 120')
         #history = model.fit(x_train, y_train, batch_size=32, epochs=100, verbose=0, callbacks=[tensorboard_callback])
         history = model.fit(x_train, y_train, batch_size=32, epochs=100, verbose=0)
         

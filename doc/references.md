@@ -29,6 +29,16 @@
 
    https://qiita.com/Ishotihadus/items/6ecf5684c2cbaaa6a5ef
 
+ * TensorFlow, Kerasで重み・バイアスなどの値を取得、可視化 | note.nkmk.me
+
+   学習モデルの中身を知るために調べた。次項の乱数を同じにし、同じ入力をモデルに与えれば内部の重みも同じになるか調べたが、原因不明だが同じにならない。
+
+   https://note.nkmk.me/python-tensorflow-keras-get-weights-kernel-bias/
+
+ * Kerasで再現可能な結果を得る方法 - Qiita
+
+   https://qiita.com/KodaiS/items/25a9e24281220d19ad84
+
 ### GPU使用
  * 機械学習時にGPUを認識してくれなくて、とっても困っている人向けの記事 | by Yutaka_kun | LSC PSD | Medium
 
@@ -85,6 +95,54 @@
  * GCP AI platform training cannot use full GPU quota - Stack Overflow
 
    https://stackoverflow.com/questions/59689382/gcp-ai-platform-training-cannot-use-full-gpu-quota
+
+### Google Cloud Platform
+
+ * GCPでDeep LearningのためのGPU環境を構築する - Zeals TECH BLOG
+
+   TensorFlow Cloudで上手くいかなかったので、GCPにVMを作ることにした。そのときとても参考になった。
+
+   https://tech.zeals.co.jp/entry/2019/01/08/094054
+
+ * Google Cloud Shell 'No space left on device' even though disk not full? - Stack Overflow
+
+   https://stackoverflow.com/questions/66564830/google-cloud-shell-no-space-left-on-device-even-though-disk-not-full
+
+### TensorFlow 機械学習高速化
+
+ * tensorflowで高速に学習するための実装 - Qiita
+
+   高速化ではGPUへのコピーを速くするのが良いということを知った記事。だがこの内容は実践してない。
+
+   https://qiita.com/mim92/items/d115a273bcec81554ec2
+
+ * TensorFlow Profilerを用いた学習時間の短縮 - ユニファ開発者ブログ
+
+   tf.datasetを使うのが一般的なことと、GPUスレッド占有化の環境変数があることを知った。
+
+   https://tech.unifa-e.com/entry/2020/09/08/120450
+
+ * tf.data.Dataset  |  TensorFlow v2.12.0
+
+   https://www.tensorflow.org/api_docs/python/tf/data/Dataset
+
+ * Time Series-TensorFlow RNN-LSTM Introduction | Kaggle
+
+   **めちゃくちゃ参考になった記事。**tf.datasetを用いて時系列データを学習させる実装が書いてある。
+
+   https://www.kaggle.com/code/kutaykutlu/time-series-tensorflow-rnn-lstm-introduction
+
+ * Multi-GPU and distributed training
+
+   未対応。そもそもGPUが複数認識されてない。
+
+   https://keras.io/guides/distributed_training/
+
+ * 転移学習とファインチューニング  |  TensorFlow Core
+
+   ほとんど読んでないが、役に立つことがあるかも
+
+   https://www.tensorflow.org/guide/keras/transfer_learning/?hl=ja
 
 ### 株価データ取得
 
@@ -149,4 +207,19 @@
   時刻ずれてると思ったらタイムゾーンが日本になってなかった(アホ)。
 
   https://zenn.dev/kumamoto/articles/51bf0893620f0c
+
+ * Pythonで シグナルをトラップするサンプルスクリプト - Qiita
+
+   https://qiita.com/asahi0301/items/5572f1aff630f02cc182
+
+ * ELSA System Graph のダウンロード - 株式会社 エルザ ジャパン
+
+   GPUパフォーマンスについて、タスクマネージャだけではよくわからなかったので使用したソフト
+
+   https://www.elsa-jp.co.jp/support/download/driver/system-graph/
   
+ * Python未導入環境においてPandasGUIとpandas-profilingを使用可能なEDAツール『Pandas Anywhere』を作ってみた - Qiita
+
+   pandasのDataFrameをExcelライクに表示する目的で使用したソフト
+
+   https://qiita.com/kunishou/items/dfa0f5482bebb30ed064

@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import os
 #os.environ['TF_CPP_MIN_LOG_LEVEL']='2'   # TensorFlowの警告を出力しない
+os.environ['TF_GPU_THREAD_MODE'] = 'gpu_private' # GPU占有化
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import MinMaxScaler
 from keras.models import Sequential
