@@ -7,6 +7,7 @@ import os
 import tqdm
 import time
 from plyer import notification
+import datetime
 
 # 自作ロガー追加
 import sys
@@ -45,7 +46,8 @@ def get_stockdata(company_code, period_type, period, freq_type, freq):
     df_base = df_base.apply(add_date, axis=1)
     # (明示的に)数値に変換
     df_base = df_base.astype({'open':float, 'high':float, 'low':float, 'close':float, 'volume':float})
-    
+    # 'date': datetime.dateもしたかったが、dfにdateはない(datetime64[ns]ならある)からやめといた
+
     return df_base
 
 # 株価情報データを作成

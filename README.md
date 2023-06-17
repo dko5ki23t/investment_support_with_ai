@@ -72,6 +72,20 @@ docker run --gpus all -it --privileged -v C:\Users\dko5k\Documents\git\investmen
 
 * TensorRTは未インストール。
 
+* Python環境構築は以下の手順で。
+
+  * gitを入れる(pyenv入れるため)
+
+    https://git-scm.com/download/win
+
+  * pyenvをインストール
+
+    https://zenn.dev/lot36z/articles/1c734bde03677c
+
+  * pyenvで所望のpytthonバージョンをインストール
+
+    https://qiita.com/twipg/items/75fc9428e4c33ed429c0
+
 ### 動作確認環境：各ツール等のバージョン
 
 #### ハードウェア

@@ -48,7 +48,7 @@ class model_3:
         self.stock = stock
         self.days = X
         self.last_date = last_date
-        self.modelfile = dir + '/models/' + str(code) + '_' + self.name
+        self.modelfile = dir + '/models/' + str(self.code) + '_' + self.name
 
         # データを0-1に正規化
         self.scaler = MinMaxScaler(feature_range=(0, 1))
@@ -152,8 +152,9 @@ class model_3:
         self.scaled_Y = self.scaler.fit_transform(Y)
 
         # モデル読み込み
-        model = tf.keras.models.load_model(self.modelfile)
-        if (model is None):
+        try:
+            model = tf.keras.models.load_model(self.modelfile)
+        except IOError:
             print('model is none')
             self.first_compile(Y)
             return

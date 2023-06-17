@@ -13,7 +13,7 @@ import random
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '../../logger'))
 from logger import Logger
-logger = Logger(__name__, 'model_6.log')
+logger = Logger(__name__, 'model_global_1.log')
 
 
 # 乱数シードを固定
@@ -31,7 +31,7 @@ def set_seed(seed=1234):
 WINDOW_SIZE = 60
 
 # ファイル名と同じクラスを持ち、共通のestimate関数を用意する
-class model_6:
+class model_1:
     """Fit the model.
 
         LSTMによる推定(TODO)
@@ -56,80 +56,77 @@ class model_6:
         self : object
             Pipeline with fitted steps.
     """
-    def __init__(self, code: int, stock: str, X: pd.Series, Y: pd.Series, last_date: pd.Timestamp, dir: str, *discard):
-        self.name = 'model6'
-        self.code = code
-        self.stock = stock
-        self.days = X
-        self.Y = Y
+    def __init__(self, days: pd.Series, df_closes_global: pd.DataFrame,
+                 out_dir: str, last_date: pd.Timestamp, *discard):
+        self.name = 'model_global_1'
+        # データを加工
+        logger.info(df_closes_global)
+        dataset = df_closes_global.values
+        logger.info(df_closes_global.values)
+        self.data_mean = dataset.mean(axis=0)
+        self.data_std = dataset.std(axis=0)
+        dataset = (dataset-self.data_mean) / self.data_std
+        self.columns = df_closes_global.columns
+        self.dataset = dataset
+        
+        self.days = days
         self.last_date = last_date
-        self.modelfile = dir + '/models/' + str(self.code) + '_' + self.name
+        self.modelfile = out_dir + '/models/' + self.name
 
         self.first_compile()
-
-    # https://www.kaggle.com/code/kutaykutlu/time-series-tensorflow-rnn-lstm-introduction
-    # LSTM用にデータセットを作る
-    def windowed_dataset(self, series, window_size, batch_size, shuffle_buffer):
-        series = tf.expand_dims(series, axis=-1)   # 最後に次元を一つ追加
-        ds = tf.data.Dataset.from_tensor_slices(series)
-        ds = ds.window(window_size + 1, shift=1, drop_remainder=True)
-        ds = ds.flat_map(lambda w: w.batch(window_size + 1))
-        #for element in ds:
-        #    logger.info(element)
-        ds = ds.shuffle(shuffle_buffer)
-        ds = ds.map(lambda w: (w[:-1], w[-1]))  # 60日間, その次の日
-        ds = ds.batch(batch_size).prefetch(tf.data.experimental.AUTOTUNE)
-        return ds
     
-    # https://www.kaggle.com/code/kutaykutlu/time-series-tensorflow-rnn-lstm-introduction
-    # LSTMモデルで予測
-    # 戻り値：ndarray shape=(x, WINDOW_SIZE, 1)
-    def model_forecast(self, model, series, window_size):
-        series = tf.expand_dims(series, axis=-1)   # 最後に次元を一つ追加
-        ds = tf.data.Dataset.from_tensor_slices(series)
-        ds = ds.window(window_size, shift=1, drop_remainder=True)
-        ds = ds.flat_map(lambda w: w.batch(window_size))
-        ds = ds.batch(32).prefetch(tf.data.experimental.AUTOTUNE)
-        forecast = model.predict(ds)
-        return forecast    
+    # https://www.kaggle.com/code/nicapotato/keras-timeseries-multi-step-multi-output
+    def multivariate_multioutput_data(self, dataset, target, start_index, end_index,
+                    history_size, target_size, step, single_step=False):
+        data = []
+        labels = []
+
+        start_index = start_index + history_size
+        if end_index is None:
+            end_index = len(dataset) - target_size
+
+        for i in range(start_index, end_index):
+            indices = range(i-history_size, i, step)
+            data.append(dataset[indices])
+
+            if single_step:
+                labels.append(target[i+target_size])
+            else:
+                labels.append(target[i:i+target_size])
+
+        return np.array(data), np.array(labels)
 
     def first_compile(self):
         # 乱数シード固定
         set_seed()
+
         # データ数が足りなければ終了
         # TODO:ここで終了するとmodelが作成されず、compile(),predict()呼び出し時にエラーになる
-        if len(self.Y) <= WINDOW_SIZE + 1:
+        if len(self.dataset) <= WINDOW_SIZE:
             self.msr = 10000
-            logger.info('[' + str(self.code) + ']cannot learn because few data')
+            logger.info('cannot learn because few data')
             return False
 
-        # 訓練データとテストデータに分ける
-        #x_train = self.Y[:training_data_len]
-        x_train = self.Y
+        # 訓練データ作成
+        logger.info(self.dataset)
+        x_train, y_train = self.multivariate_multioutput_data(
+                            self.dataset[:,:], self.dataset[:,:],
+                            0, None, WINDOW_SIZE, 1, 1, single_step=True)
+
+        logger.info(x_train.shape)
 
         shuffle_buffer_size = 1000  # TODO
         batch_size = 128            # TODO
 
-        # データセット作成
-        train_set = self.windowed_dataset(x_train, WINDOW_SIZE, batch_size, shuffle_buffer_size)
-        logger.info('[' + str(self.code) + ']first compile')
+        # tf.Dataデータセット作成
+        train_set = tf.data.Dataset.from_tensor_slices((x_train, y_train))
+        train_set = train_set.shuffle(shuffle_buffer_size)
+        train_set = train_set.batch(batch_size).prefetch(tf.data.experimental.AUTOTUNE)
+        logger.info('first compile')
         #for element in train_set.as_numpy_iterator():
         #    logger.info(element)
         #for element in train_set:
         #    logger.info(element)
-        
-        #model = Sequential([
-        #    tf.keras.layers.Conv1D(filters=64, kernel_size=5,
-        #                           strides=1, padding='causal',
-        #                           activation='relu',
-        #                           input_shape=[None, 1]),
-        #    LSTM(64, return_sequences=True),
-        #    LSTM(128, return_sequences=True),
-        #    Dense(32, activation='relu'),
-        #    Dense(16, activation='relu'),
-        #    Dense(1),
-        #    #tf.keras.layers.Lambda(lambda x: x * 400)
-        #])
 
         model = Sequential([
             LSTM(units=50, return_sequences=True),
@@ -142,17 +139,6 @@ class model_6:
             Dropout(0.2),
             Dense(1),
         ])
-
-        #model = Sequential()
-        #model.add(LSTM(units=50,return_sequences=True,input_shape=(x_train.shape[1], 1)))
-        #model.add(Dropout(0.2))
-        #model.add(LSTM(units=50,return_sequences=True))
-        #model.add(Dropout(0.2))
-        #model.add(LSTM(units=50,return_sequences=True))
-        #model.add(Dropout(0.2))
-        #model.add(LSTM(units=50))
-        #model.add(Dropout(0.2))
-        #model.add(Dense(units=1))
 
         print('compile start (for the first time)')
         model.compile(optimizer='adam', loss='mean_squared_error', metrics=['accuracy'])
@@ -180,21 +166,17 @@ class model_6:
         model.save(self.modelfile)
         return True
 
-    def compile(self, delta_X: pd.Series, delta_Y: pd.Series, last_date: pd.Timestamp, *discard):
-        logger.info('compile [' + str(self.code) + ']')
-        # 日数を結合
-        self.days = pd.concat([self.days, delta_X])
+    '''
+    def compile(self, delta_closes: pd.DataFrame, last_date: pd.Timestamp, *discard):
+        logger.info('compile (' + self.name + ')')
         # データを結合
         self.Y = pd.concat([self.Y, delta_Y])
-        # データ数が足りなければ終了
-        if len(self.Y) <= WINDOW_SIZE + 1:
-            self.msr = 10000
-            logger.info('[' + str(self.code) + ']cannot learn because few data')
-            return
+        # 日数を更新
+        self.days = pd.concat([self.days, delta_X])
+        
         # モデル読み込み
-        try:
-            model = tf.keras.models.load_model(self.modelfile)
-        except IOError:
+        model = tf.keras.models.load_model(self.modelfile)
+        if (model is None):
             self.first_compile()
             return
 
@@ -216,24 +198,37 @@ class model_6:
         # self.msr = np.mean((predictions - y_test) ** 2)
 
         self.last_date = last_date
-
+    '''
         
     def predict(self, days):
         # モデル読み込み
         model = tf.keras.models.load_model(self.modelfile)
-        test_data = self.Y
-        predictions = self.model_forecast(model, test_data, WINDOW_SIZE)
-        predictions = predictions[:, -1]  # shape=(x, 1)
+        # 既存データの1日後を予測
+        x_test, y_test = self.multivariate_multioutput_data(
+                            self.dataset[:,:], self.dataset[:,:],
+                            0, None, WINDOW_SIZE, 1, 1, single_step=True)
+        predictions = model.predict(x_test)
+        '''
         # モデルの予想値を含めて作成
-        # TODO:days=1でしか試してないからこのfor文正しく動くかわからん
         for i in range(len(test_data) + 1, len(test_data) + days):
-            test_data = test_data.append(pd.Series([predictions[-1]]))
-            test_one = test_data[i-WINDOW_SIZE:i]
-            predict_one = self.model_forecast(model, test_one, WINDOW_SIZE)
-            predictions = np.append(predictions, predict_one[-1, -1])
+            test_data = np.append(test_data, predictions[-1])
+            test_data = np.reshape(test_data, (test_data.shape[0], 1))
+            x_test_one = []
+            x_test_one.append(test_data[i-window_size:i, 0])
+            x_test_one = np.array(x_test_one)
+            x_test_one = np.reshape(x_test_one, (x_test_one.shape[0], x_test_one.shape[1], 1))
+            predictions = np.append(predictions, model.predict(x_test_one))
+            predictions = np.reshape(predictions, (predictions.shape[0], 1))
+        '''
+        logger.info('predictions.shape:' + str(predictions.shape))
+        # 正規化を元に戻す
+        y_hat = predictions * self.data_std + self.data_mean
+        logger.info('y_hat:' + str(y_hat.shape))
+        
         # 1次元化
-        predictions = predictions.ravel()
+        #y_hat = y_hat.ravel()
+
         first_day = self.days.iloc[0] + WINDOW_SIZE
         last_day = self.days.iloc[-1] + WINDOW_SIZE + days
         ret_days = np.arange(first_day, last_day + 1, 1)
-        return (ret_days, predictions)
+        return (ret_days, y_hat)
