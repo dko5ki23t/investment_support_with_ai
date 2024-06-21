@@ -4,5 +4,5 @@
 *.pyc
 *.log
 log/*
-data/*
-data2/*
+private/*
+db/*
