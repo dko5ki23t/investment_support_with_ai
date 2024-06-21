@@ -1,9 +1,0 @@
-*.pkl
-*.html
-*.csv
-*.pyc
-*.log
-log/*
-private/*
-db/*
-settings/*
