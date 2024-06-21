@@ -1,0 +1,4 @@
+; JQuantsの情報
+
+mailaddress xxxx@xxxx           ;メールアドレス
+password xxxxx                  ;パスワード
