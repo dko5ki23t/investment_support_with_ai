@@ -1,4 +1,3 @@
-import pandas as pd
 import argparse
 import sys
 import json
@@ -19,14 +18,7 @@ def get_id_token(refresh_token):
     r_json = r_post.json()
     return r_json["idToken"]
 
-def main():
-    args = set_argparse()
-    mailaddress = args.mailaddress  # メールアドレス
-    password = args.password    # パスワード
-    try:
-        settings = json.load(open(settings_file, 'r'))
-    except:
-        print('設定ファイルを読み込めませんでした')
+def get_tokens(mailaddress: str, password: str, settings: dict):
     # 引数で指定されていない場合は設定ファイルから読み込み
     if mailaddress == '':
         try:
@@ -60,6 +52,7 @@ def main():
             r_post = requests.post("https://api.jquants.com/v1/token/auth_user", data=json.dumps(data))
             r_json = r_post.json()
             settings["refresh_token"] = r_json["refreshToken"]
+            print('リフレッシュトークン取得に成功しました')
         except:
             print('リフレッシュトークン取得に失敗しました')
             sys.exit(1)
@@ -78,6 +71,17 @@ def main():
     with open(settings_file, 'w') as f:
         json.dump(settings, f, indent=2)
         print('取得したトークンを設定ファイルに書き込みました')
+
+def main():
+    args = set_argparse()
+    mailaddress = args.mailaddress  # メールアドレス
+    password = args.password    # パスワード
+    try:
+        settings = json.load(open(settings_file, 'r'))
+    except:
+        print('設定ファイルを読み込めませんでした')
+        sys.exit(1)
+    get_tokens(mailaddress, password, settings)
 
 if __name__ == "__main__":
     main()
