@@ -20,32 +20,36 @@ def set_argparse():
     args = parser.parse_args()
     return args
 
-def main():
-    args = set_argparse()
+def fetch_data(input: str, output: str, codes: list):
     try:
         settings = json.load(open(settings_file, 'r'))
     except:
         print('設定ファイルを読み込めませんでした')
         sys.exit(1)
     # 入力ファイル決定
-    input_file = args.input
+    input_file = input
     if input_file == '':
         input_file = input_file_default
     # 出力先ディレクトリ決定
-    out_dir = args.output
+    out_dir = output
     if out_dir == '':
         out_dir = out_dir_default
 
     # 使用するサービスによって分岐
     using_service = settings['using_service']
     if using_service == 'jquants':
-        fetch_data_jquants.fetch_data(input_file, out_dir, args.codes)
+        fetch_data_jquants.fetch_data(input_file, out_dir, codes)
     elif using_service == 'yfinance':
-        fetch_data_yfinance.fetch_data(input_file, out_dir, args.codes)
+        fetch_data_yfinance.fetch_data(input_file, out_dir, codes)
     else:
         print('設定ファイルに記載された株情報取得サービスでは上場銘柄の株価データを取得できません')
         print('代わりにJQuantsを用いて情報を取得します')
         fetch_data_jquants.fetch_data(input_file, out_dir)
+
+def main():
+    args = set_argparse()
+    fetch_data(args.input, args.output, args.codes)
+    
 
 if __name__ == "__main__":
     main()

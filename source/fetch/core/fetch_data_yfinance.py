@@ -8,9 +8,6 @@ import time
 import yfinance as yf
 from datetime import datetime
 
-sys.path.append(os.path.dirname(__file__))
-import fetch_stock_info_jquants
-
 # 自作ロガー追加
 #import sys
 #import os
@@ -59,11 +56,11 @@ def get_stock_df(code: str, file_path: str):
             ret = pl.from_pandas(get_stock_data(ticker, start, '').reset_index())
             ret = ret.with_columns(ret['Date'].dt.strftime("%Y-%m-%d"))
             # Code列追加
-            stock_df = stock_df.with_columns(pl.lit(code).alias("Code"))
+            ret = ret.with_columns(pl.lit(code).alias("Code"))
             stock_df = pl.concat([stock_df_removed, ret])
             ## 株価データをファイルに書き込み
             stock_df.write_parquet(file_path)
-        except:
+        except Exception as e:
             print(f'株価データ取得に失敗しました（株コード：{code}）')
     else:        # 存在しないので、全取得
         try:

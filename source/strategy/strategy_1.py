@@ -1,9 +1,6 @@
 import argparse         # コマンドライン引数チェック用
 import json
-import sys
-import polars as pl
 import os
-import datetime
 from pathlib import Path
 import glob
 import math
@@ -44,6 +41,7 @@ def main():
             estimates = estimates + json.load(f)["estimate"]
     # 売買指示リスト
     orders = []
+    # TODO: tqdm
     for estimate in estimates:
         if estimate['gains'] > 0:
             # 始値で買う
@@ -53,17 +51,17 @@ def main():
                 "code": estimate['code'],
                 "type": "buy-open",
                 "value": 0,
-                "volume": 100
+                "volume": -1    # 買えるだけ買う
             }
             orders.append(order)
             # 買値との差がgainsを超えたら売る
             order = {
                 "date": estimate['date'],
-                "due": estimate['date'],
+                "due": "max",
                 "code": estimate['code'],
                 "type": "sell-delta",
                 "value": math.floor(estimate['gains']),
-                "volume": 100
+                "volume": -1    # 保持している分全て売る
             }
             orders.append(order)
     output = {"orders": orders}

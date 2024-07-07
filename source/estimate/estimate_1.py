@@ -5,6 +5,9 @@ import polars as pl
 import os
 import datetime
 from pathlib import Path
+import math
+import glob
+import tqdm
 
 # 自作ロガー追加
 #import sys
@@ -15,31 +18,7 @@ from pathlib import Path
 
 out_estimate_directory_default = os.path.join(os.path.dirname(__file__), '../../db/estimates/estimate_1')
 
-def set_argparse():
-    parser = argparse.ArgumentParser(description='単純移動平均から予想を出す')
-    parser.add_argument('input', help='株価データが保存されたファイル')
-    parser.add_argument('-o', '--output', help='予想の出力ファイル', default='')
-    args = parser.parse_args()
-    return args
-
-def main():
-    args = set_argparse()
-    # 株価データ読み込み
-    try:
-        stock_df = pl.read_parquet(args.input)
-    except:
-        print('株価データファイルの読み込みに失敗しました')
-        sys.exit(1)
-    # 出力先ファイル決定
-    out_strategy_file = args.output
-    if out_strategy_file == '':
-        # 保存先ディレクトリがない場合は作成
-        dir = Path(out_estimate_directory_default)
-        dir.mkdir(parents=True, exist_ok=True)
-        out_strategy_file = os.path.join(
-            out_estimate_directory_default, os.path.splitext(os.path.basename(args.input))[0]
-        ) + '.json'
-
+def estimate(stock_df: pl.DataFrame, out_file: str):
     start_idx = 25 # 単純移動平均が求められるところから
     # 5日単純移動平均を作る
     sma5 = stock_df.with_row_index(name="index")
@@ -61,24 +40,63 @@ def main():
     code = stock_df.get_column('Code')[0]
     isSMA5larger = True
     for i in range(len(out)):
-        if not isSMA5larger and out.get_column('SMA5')[i] > out.get_column('SMA25')[i]:
+        if not isSMA5larger and out.get_column('SMA5')[i] > out.get_column('SMA5')[i-1]:
             # 上回った次の日に注文する
             out_day = (
                 datetime.datetime.strptime(out.get_column('Date')[i], "%Y-%m-%d") + datetime.timedelta(days=1)
             ).strftime("%Y-%m-%d")
-            # 予想上昇幅
-            gains = (out.get_column('SMA25')[i] - out.get_column('SMA25')[i-1]) * out.get_column('Close')[i]
-            # 信頼度スコア
             # TODO: このへんの値適当なので、調整
-            score = 1 / gains
+            # 予想上昇幅
+            gains = math.ceil(out.get_column('SMA5')[i] - out.get_column('SMA25')[i])
+            # 信頼度スコア
+            if gains == 0:
+                score = 0
+                gains = 1
+            else:
+                score = 1 / gains
             out_days.append({"date": out_day, "code": code, "gains": gains, "score": score})
             isSMA5larger = True
         elif isSMA5larger and out.get_column('SMA5')[i] < out.get_column('SMA25')[i]:
             isSMA5larger = False
     output = {"estimate": out_days}
     # ファイル出力
-    with open(out_strategy_file, 'w') as f:
+    with open(out_file, 'w') as f:
         json.dump(output, f, indent=2)
+
+def set_argparse():
+    parser = argparse.ArgumentParser(description='単純移動平均から予想を出す')
+    parser.add_argument('input', help='株価データが保存されたファイルまたはディレクトリ')
+    parser.add_argument('-o', '--output', help='予想の出力ファイル。ただし、inputの対象が1ファイルのときのみ有効', default='')
+    args = parser.parse_args()
+    return args
+
+def main():
+    args = set_argparse()
+    data_files = []
+    if os.path.isdir(args.input):
+        data_files = glob.glob(args.input + '/*.parquet')
+    else:
+        data_files = [args.input]
+
+    for index in tqdm.tqdm(range(len(data_files))):
+        data_file = data_files[index]
+        # 株価データ読み込み
+        try:
+            stock_df = pl.read_parquet(data_file)
+        except:
+            print('株価データファイルの読み込みに失敗しました')
+            sys.exit(1)
+        # 出力先ファイル決定
+        out_strategy_file = args.output
+        if out_strategy_file == '' or len(data_files) > 1:
+            # 保存先ディレクトリがない場合は作成
+            dir = Path(out_estimate_directory_default)
+            dir.mkdir(parents=True, exist_ok=True)
+            out_strategy_file = os.path.join(
+                out_estimate_directory_default, os.path.splitext(os.path.basename(data_file))[0]
+            ) + '.json'
+
+        estimate(stock_df, out_strategy_file)
 
 
 if __name__ == "__main__":
