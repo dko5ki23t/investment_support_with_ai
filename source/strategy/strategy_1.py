@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import glob
 import math
+from tqdm import tqdm
 
 # 自作ロガー追加
 #import sys
@@ -36,38 +37,58 @@ def main():
     estimate_files = glob.glob(args.input + '/*.json')
     # 予想リスト
     estimates = []
-    for estimate_file in estimate_files:
+    print('予想ファイル読み込み・・・')
+    for index in tqdm(range(len(estimate_files))):
+        estimate_file = estimate_files[index]
         with open(estimate_file) as f:
             estimates = estimates + json.load(f)["estimate"]
+    print('完了')
     # 売買指示リスト
     orders = []
-    # TODO: tqdm
-    for estimate in estimates:
+    # 日付->予想のdict
+    date_to_estimate = {}
+    print('注文作成準備・・・')
+    for index in tqdm(range(len(estimates))):
+        estimate = estimates[index]
+        gains = estimate['gains']
+        date = estimate['date']
         if estimate['gains'] > 0:
-            # 始値で買う
-            order = {
-                "date": estimate['date'],
-                "due": estimate['date'],
-                "code": estimate['code'],
-                "type": "buy-open",
-                "value": 0,
-                "volume": -1    # 買えるだけ買う
-            }
-            orders.append(order)
-            # 買値との差がgainsを超えたら売る
-            order = {
-                "date": estimate['date'],
-                "due": "max",
-                "code": estimate['code'],
-                "type": "sell-delta",
-                "value": math.floor(estimate['gains']),
-                "volume": -1    # 保持している分全て売る
-            }
-            orders.append(order)
+            if date not in date_to_estimate or date_to_estimate[date]['gains'] < gains:
+                # 同じ日の注文なら利益が大きい方のみ残す
+                date_to_estimate[date] = estimate
+    print('完了')
+    print('注文作成・・・')
+    # 注文作成
+    estimates = list(date_to_estimate.values())
+    for index in tqdm(range(len(estimates))):
+        estimate = estimates[index]
+        # 始値で買う
+        order = {
+            "date": estimate['date'],
+            "due": estimate['date'],
+            "code": estimate['code'],
+            "type": "buy-open",
+            "value": 0,
+            "volume": -1    # 買えるだけ買う
+        }
+        orders.append(order)
+        # 買値との差がgainsを超えたら売る
+        order = {
+            "date": estimate['date'],
+            "due": "max",
+            "code": estimate['code'],
+            "type": "sell-delta",
+            "value": math.floor(estimate['gains']),
+            "volume": -1    # 保持している分全て売る
+        }
+        orders.append(order)
+    print('完了')
+    print('ファイルへ出力・・・')
     output = {"orders": orders}
     # 売買指示をファイル出力
     with open(out_order_file, 'w') as f:
         json.dump(output, f, indent=2)
+    print('完了')
 
 
 if __name__ == "__main__":

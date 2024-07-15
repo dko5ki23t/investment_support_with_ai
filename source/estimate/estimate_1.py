@@ -16,6 +16,7 @@ import tqdm
 #from logger import Logger
 #logger = Logger(__name__, 'analyze.log')
 
+input_directory_default = os.path.join(os.path.dirname(__file__), '../../db/stock_data')
 out_estimate_directory_default = os.path.join(os.path.dirname(__file__), '../../db/estimates/estimate_1')
 
 def estimate(stock_df: pl.DataFrame, out_file: str):
@@ -63,6 +64,36 @@ def estimate(stock_df: pl.DataFrame, out_file: str):
     with open(out_file, 'w') as f:
         json.dump(output, f, indent=2)
 
+def estimate_gen(input: str, output: str):
+    input_internal = input
+    if input_internal == '':
+        input_internal = input_directory_default
+    if os.path.isdir(input_internal):
+        data_files = glob.glob(input_internal + '/*.parquet')
+    else:
+        data_files = [input_internal]
+
+    for index in tqdm.tqdm(range(len(data_files))):
+        data_file = data_files[index]
+        # 株価データ読み込み
+        try:
+            stock_df = pl.read_parquet(data_file)
+        except:
+            print('株価データファイルの読み込みに失敗しました')
+            sys.exit(1)
+        # 出力先ファイル決定
+        out_strategy_file = output
+        if out_strategy_file == '' or len(data_files) > 1:
+            # 保存先ディレクトリがない場合は作成
+            dir = Path(out_estimate_directory_default)
+            dir.mkdir(parents=True, exist_ok=True)
+            out_strategy_file = os.path.join(
+                out_estimate_directory_default, os.path.splitext(os.path.basename(data_file))[0]
+            ) + '.json'
+
+        estimate(stock_df, out_strategy_file)
+        yield [index, len(data_files)]
+
 def set_argparse():
     parser = argparse.ArgumentParser(description='単純移動平均から予想を出す')
     parser.add_argument('input', help='株価データが保存されたファイルまたはディレクトリ')
@@ -97,6 +128,8 @@ def main():
             ) + '.json'
 
         estimate(stock_df, out_strategy_file)
+
+    sys.exit(0)
 
 
 if __name__ == "__main__":

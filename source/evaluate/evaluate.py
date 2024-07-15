@@ -9,6 +9,8 @@ import copy
 import math
 import tqdm
 import bisect
+import statistics
+import plotly.express as px
 
 # 自作ロガー追加
 sys.path.append(os.path.join(os.path.dirname(__file__), '../logger'))
@@ -164,11 +166,11 @@ def evaluate(orders_db: OrdersDB, stock_data_dir: str, base: int, gains: int, st
     amount = copy.copy(base)
 
     target_date = copy.copy(start)
+
     # 開始日～終了日までloop
     while target_date <= end:
         # 対象日に有効な注文のリスト取得
         target_orders = orders_db.get_order_from_period(d_to_str(start), d_to_str(target_date))
-        logger.info("注文リスト取得完了")
         # 各売買指示を処理
         for order in target_orders:
             # 対象銘柄を読み込み済みかどうか
@@ -342,9 +344,9 @@ def set_argparse():
     parser = argparse.ArgumentParser(description='実データを用いて対象の売買を評価する')
     parser.add_argument('input', help='売買指示データが保存されたファイル')
     parser.add_argument('-d', '--data', help='株価データが保存されたディレクトリ', default='')
-    parser.add_argument('-b', '--base', help='元金', default=1000000)
-    parser.add_argument('-g', '--gains', help='目標利益', default=100000)
-    parser.add_argument('-p', '--period', help='期間（日）', default=20)
+    parser.add_argument('-b', '--base', help='元金', type=int, default=1000000)
+    parser.add_argument('-g', '--gains', help='目標利益', type=int, default=100000)
+    parser.add_argument('-p', '--period', help='期間（日）', type=int, default=20)
     parser.add_argument('-s', '--start', help='評価を開始する日付（YYYY-MM-DD）', default='2016-01-01')
     args = parser.parse_args()
     return args
@@ -370,6 +372,7 @@ def main():
     # 日付->注文にアクセスできるデータベースを作成する
     orders_db = OrdersDB(orders['orders'])
     success_num = 0     # 目標利益に達した数
+    realized_list = []  # 実現損益リスト
     for index in tqdm.tqdm(range(total_period)):
         start_and_end = start_ends[index]
         # 期間をログ出力
@@ -383,11 +386,25 @@ def main():
         if holding_stocks is not None:
             for k, v in holding_stocks.items():
                 logger.info(f"[{k}]評価損益：{v.valuation}")
+        realized_list.append(rets['realized'])
         logger.info(f"実現損益：{rets['realized']}")
         if rets['realized'] >= args.gains:
             success_num = success_num + 1
+    # 横軸=終了日時、縦軸=実現損益のグラフ作成
+    ends = [e[1] for e in start_ends]
+    fig_df = pl.DataFrame({'Date': ends, 'Realized': realized_list})
+    fig_df = fig_df.with_columns(pl.lit('実現損益').alias('Name'))
+    # 目標額の直線
+    goal_df = pl.DataFrame({'Date': ends})
+    goal_df = goal_df.with_columns(pl.lit(args.gains).cast(pl.Float64).alias('Realized'), pl.lit('目標損益').alias('Name'))
+    # 連結
+    fig_df = pl.concat([fig_df, goal_df])
+    fig = px.line(x=fig_df['Date'], y=fig_df['Realized'], labels={'x': '期間終了日', 'y': '実現損益(円)'}, color=fig_df['Name'])
+    fig.show()
     print(f'目標達成率：{(success_num / total_period) * 100}% ({success_num}/{total_period})')
     logger.info(f'目標達成率：{(success_num / total_period) * 100}% ({success_num}/{total_period})')
+    print(f'平均：{statistics.mean(realized_list)} 最大：{max(realized_list)} 最小：{min(realized_list)} 中央：{statistics.median(realized_list)}')
+    logger.info(f'平均：{statistics.mean(realized_list)} 最大：{max(realized_list)} 最小：{min(realized_list)} 中央：{statistics.median(realized_list)}')
 
 if __name__ == "__main__":
     main()

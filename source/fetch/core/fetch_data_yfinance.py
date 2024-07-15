@@ -131,6 +131,63 @@ def fetch_data(input: str, output: str, codes: list):
     )
     '''
 
+def fetch_data_gen(input: str, output: str, codes: list):
+    # 入力ファイル決定
+    input_file = input
+    if input_file == '':
+        input_file = input_file_default
+    # 出力先ディレクトリ決定
+    out_dir = output
+    if out_dir == '':
+        out_dir = out_dir_default
+
+    # 銘柄情報ファイル読み込み
+    df = pl.read_csv(input_file)
+    # 保存先ディレクトリがない場合は作成
+    dir = Path(out_dir)
+    dir.mkdir(parents=True, exist_ok=True)
+    # 取得開始時刻
+    time_begin = time.perf_counter()
+    '''
+    # 日経平均株価取得
+    print('(1/2)fetch Nikkei225 data...')
+    code = 'N225'
+    code_real = '^N225'
+    name = '日経平均株価'
+    file = args.out_dir + '/N225.pkl'
+    stock_df = build_stock_df(code, code_real, name, file)
+    stock_df.to_pickle(file)
+    print('done')
+    '''
+    
+    # 各銘柄の株価データ取得
+    print('各銘柄の株価データを取得しています・・・')
+    if codes is None or len(codes) == 0:
+        for index in tqdm.tqdm(range(len(df))):
+            code = df.get_column('Code')[index]
+            file_path = out_dir + '/' + code + '.parquet'
+            stock_df = get_stock_df(code, file_path)
+            yield [index, len(df)]
+    else:
+        for index in tqdm.tqdm(range(len(codes))):
+            code = codes[index]
+            file_path = out_dir + '/' + code + '.parquet'
+            stock_df = get_stock_df(code, file_path)
+            yield [index, len(df)]
+    print('完了')
+    time_end = time.perf_counter()
+    elapsed = time_end - time_begin
+    #logger.info('fetch and save all data in ' + str(elapsed) + 's')
+    # 完了通知
+    '''
+    notification.notify(
+        title="complete fetching data",
+        message="complete fetching data",
+        app_name="fetch_data.py",
+        timeout=10
+    )
+    '''
+
 def set_argparse():
     parser = argparse.ArgumentParser(description='Yahoo FinanceのAPIを用いて上場銘柄の株価データを取得する')
     parser.add_argument('-i', '--input', help='銘柄情報が記載されたCSVファイル', default='')
