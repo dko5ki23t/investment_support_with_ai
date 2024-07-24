@@ -23,22 +23,23 @@ import jpholiday
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '../logger'))
 from logger import Logger
-logger = Logger(__name__, 'model_lstm_2.log')
+logger = Logger(__name__, 'model_lstm_3.log')
 
 input_directory_default = os.path.join(os.path.dirname(__file__), '../../db/stock_data')
 stock_info_file_default = os.path.join(os.path.dirname(__file__), '../../db/stock_info.csv')
-out_estimate_directory_default = os.path.join(os.path.dirname(__file__), '../../db/estimates/estimate_lstm_2')
-model_file_default = os.path.join(os.path.dirname(__file__), '../../model/model_lstm_2')
+out_estimate_directory_default = os.path.join(os.path.dirname(__file__), '../../db/estimates/estimate_lstm_3')
+model_file_default = os.path.join(os.path.dirname(__file__), '../../model/model_lstm_3')
 
 # データを0-1に正規化するためのツール
 scaler = MinMaxScaler(feature_range=(0, 1))
 scaler2 = MinMaxScaler(feature_range=(0, 1))
+scaler3 = MinMaxScaler(feature_range=(0, 1))
 
 def name():
     """
     推定方法の名前
     """
-    return 'LSTM2'
+    return 'LSTM3'
 
 def version():
     """
@@ -57,12 +58,12 @@ def next_business_day(date: str):
 def estimate(stock_df: pl.DataFrame, out_file: str, model_file='', window_size=128, show_figure=False, *discard):
     """
     LSTMによる推定を行う。
-    一定期間(window_size日数分)の終値をもとに、次の日の（高値 - 始値）を推定する。
+    一定期間(window_size日数分)の終値と出来高をもとに、次の日の（高値 - 始値）を推定する。
     与えられたデータの後半20%を用いて推定値を出し、評価値も出す。
 
     stock_df : DataFrame
                 推定のもととなる株価データ
-                必要な列 : 'Date', 'Code', 'Close'
+                必要な列 : 'Date', 'Code', 'Close', 'Volume'
 
     out_file : str
                 推定結果の出力先ファイル名
@@ -80,11 +81,13 @@ def estimate(stock_df: pl.DataFrame, out_file: str, model_file='', window_size=1
 
     code = stock_df.get_column('Code')[0]
     closes = stock_df['Close'].to_numpy().reshape(-1, 1)
+    volumes = stock_df['Volume'].to_numpy().reshape(-1, 1)
     # 高値-始値の差分
     stock_df_with_delta = stock_df.with_columns((pl.col('High') - pl.col('Open')).alias('Delta'))
     deltas = stock_df_with_delta['Delta'].to_numpy().reshape(-1, 1)
     # データを0~1の範囲に正規化
-    scaled_closes = scaler.fit_transform(closes)
+    # TODO: これでOK?
+    scaled_close_volumes = np.stack([scaler.fit_transform(closes).flatten(), scaler3.fit_transform(volumes).flatten()], axis=1)
     scaled_deltas = scaler2.fit_transform(deltas)
     # モデル読み込み
     if model_file != '':
@@ -92,39 +95,46 @@ def estimate(stock_df: pl.DataFrame, out_file: str, model_file='', window_size=1
             model = tf.keras.models.load_model(model_file)
         except IOError:
             logger.info('モデルを読み込めませんでした。新たにモデルを構築します。')
-            model = build_model(scaled_closes, scaled_deltas, code, model_file, window_size)
+            model = build_model(scaled_close_volumes, scaled_deltas, code, model_file, window_size)
     else:
-        model = build_model(scaled_closes, scaled_deltas, code, model_file, window_size)
+        model = build_model(scaled_close_volumes, scaled_deltas, code, model_file, window_size)
     # モデル作成に失敗した場合はそのままreturn
     if model is None:
         logger.error('モデル構築に失敗しました。')
         return
 
     # テストデータ(残り20%)作成
-    training_data_len = int(np.ceil(len(scaled_closes) * .8))
-    test_data_x = scaled_closes[training_data_len - window_size:, :]
+    training_data_len = int(np.ceil(len(scaled_close_volumes) * .8))
+    test_data_x = scaled_close_volumes[training_data_len - window_size:, :]
 
     x_test = []
+    '''
     y_test = deltas[training_data_len:, :]
+    '''
+    y_test = scaled_deltas[training_data_len:, :]
     for i in range(window_size, len(test_data_x)):
-        x_test.append(test_data_x[i-window_size:i, 0])
+        x_test.append(test_data_x[i-window_size:i, :])
 
     # numpy arrayに変換
     x_test = np.array(x_test)
-    x_test = np.reshape(x_test, (x_test.shape[0], x_test.shape[1], 1))
+    x_test = np.reshape(x_test, (x_test.shape[0], x_test.shape[1], 2))
 
     predictions = model.predict(x_test)
+    '''
     predictions = scaler2.inverse_transform(predictions)
-
+    '''
+    
     # RMSE(二乗平均平方根誤差、0に近いほど良い)
     rmse = np.sqrt(np.mean((predictions - y_test) ** 2))
     logger.info(f'[{code}]RMSE:{rmse}')
 
+    predictions = scaler2.inverse_transform(predictions)
+
     # 評価用ではなく、与えられたデータにない次の日の推測値を出す
-    x_predict = [test_data_x[len(test_data_x)-window_size:len(test_data_x), 0]]
+    x_predict = [test_data_x[len(test_data_x)-window_size:len(test_data_x), :]]
     # numpy arrayに変換
     x_predict = np.array(x_predict)
-    x_predict = np.reshape(x_predict, (x_predict.shape[0], x_predict.shape[1], 1))
+    x_predict = np.reshape(x_predict, (x_predict.shape[0], x_predict.shape[1], 2))
     prediction_newday = model.predict(x_predict)
     prediction_newday = scaler2.inverse_transform(prediction_newday)
     predictions = np.append(predictions, prediction_newday, axis=0)
@@ -166,29 +176,29 @@ def estimate(stock_df: pl.DataFrame, out_file: str, model_file='', window_size=1
     with open(out_file, 'w') as f:
         json.dump(output, f, indent=2)
 
-def build_model(scaled_closes: np.ndarray, scaled_deltas: np.ndarray, code: str, model_file='', window_size=128):
+def build_model(scaled_close_volumes: np.ndarray, scaled_deltas: np.ndarray, code: str, model_file='', window_size=128):
     # 全体の80%をトレーニングデータとして扱う
-    training_data_len = int(np.ceil(len(scaled_closes) * .8))
+    training_data_len = int(np.ceil(len(scaled_close_volumes) * .8))
     # データ数が足りなければ終了
     if training_data_len <= window_size:
         logger.info(f'[{code}]データ数が足りないため学習できませんでした。')
         return None
 
-    train_data_x = scaled_closes[0:int(training_data_len), :]
+    train_data_x = scaled_close_volumes[0:int(training_data_len), :]
     train_data_y = scaled_deltas[0:int(training_data_len), :]
 
     # train_dataをx_trainとy_trainに分ける
     x_train, y_train = [], []
     for i in range(window_size, len(train_data_x)):
-        x_train.append(train_data_x[i - window_size:i, 0])
-        y_train.append(train_data_y[i, 0])
+        x_train.append(train_data_x[i - window_size:i, :])
+        y_train.append(train_data_y[i, :])
 
     # numpy arrayに変換
     x_train, y_train = np.array(x_train), np.array(y_train)
-    x_train = np.reshape(x_train, (x_train.shape[0], x_train.shape[1], 1))
+    x_train = np.reshape(x_train, (x_train.shape[0], x_train.shape[1], 2))
 
     model = Sequential()
-    model.add(LSTM(units=50,return_sequences=True,input_shape=(x_train.shape[1], 1)))
+    model.add(LSTM(units=50,return_sequences=True,input_shape=(x_train.shape[1], 2)))
     model.add(Dropout(0.25))
     model.add(LSTM(units=50,return_sequences=True))
     model.add(Dropout(0.25))

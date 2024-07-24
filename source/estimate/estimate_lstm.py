@@ -5,301 +5,289 @@ import os
 import tqdm
 #os.environ['TF_CPP_MIN_LOG_LEVEL']='2'   # TensorFlowの警告を出力しない
 os.environ['TF_GPU_THREAD_MODE'] = 'gpu_private' # GPU占有化
-#from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import MinMaxScaler
 from keras.models import Sequential
 from keras.layers import Dense, LSTM, Dropout
-import tensorflow as tf
-#import matplotlib.pyplot as plt
 import plotly.express as px
+import tensorflow as tf
 #tf.debugging.set_log_device_placement(True)
+import jpholiday
+import datetime
+import json
+import glob
+from pathlib import Path
 
 # 自作ロガー追加
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '../logger'))
 from logger import Logger
-logger = Logger(__name__, 'model_3.log')
+logger = Logger(__name__, 'estimate_lstm_1.log')
+
+input_directory_default = os.path.join(os.path.dirname(__file__), '../../db/stock_data')
+stock_info_file_default = os.path.join(os.path.dirname(__file__), '../../db/stock_info.csv')
+out_estimate_directory_default = os.path.join(os.path.dirname(__file__), '../../db/estimates/estimate_lstm_1')
+model_file_default = os.path.join(os.path.dirname(__file__), '../../model/model_lstm_1')
 
 # データを0-1に正規化するためのツール
 scaler = MinMaxScaler(feature_range=(0, 1))
 
-# ファイル名と同じクラスを持ち、共通のestimate関数を用意する
-class model_3:
-    """Fit the model.
-
-        LSTMによる推定(TODO)
-
-        引数(TODO)
-        ----------
-        X : iterable
-            Training data. Must fulfill input requirements of first step of the
-            pipeline.
-
-        y : iterable, default=None
-            Training targets. Must fulfill label requirements for all steps of
-            the pipeline.
-
-        **fit_params : dict of string -> object
-            Parameters passed to the ``fit`` method of each step, where
-            each parameter name is prefixed such that parameter ``p`` for step
-            ``s`` has key ``s__p``.
-
-        戻り値(TODO)
-        -------
-        self : object
-            Pipeline with fitted steps.
+def name():
     """
-    def __init__(self, code: str, filename: str):
-        self.name = 'model_LSTM'
-        self.code = code
-        self.filename = filename
+    推定方法の名前
+    """
+    return 'LSTM1'
 
-    def first_compile(self, stock_df: pl.DataFrame):
-        closes = stock_df['Close'].to_numpy().reshape(-1, 1)
-        # データを0~1の範囲に正規化
-        scaled_closes = scaler.fit_transform(closes)
-        # 全体の80%をトレーニングデータとして扱う
-        training_data_len = int(np.ceil(len(closes) * .8))
-        # どれくらいの期間をもとに予測するか
-        window_size = 128
-        # データ数が足りなければ終了
-        # TODO:ここで終了するとmodelが作成されず、compile(),predict()呼び出し時にエラーになる
-        if training_data_len <= window_size:
-            self.msr = 10000
-            logger.info('[' + str(self.code) + ']cannot learn because few data')
-            return False
+def version():
+    """
+    バージョン
+    """
+    return '1.0'
 
-        train_data = scaled_closes[0:int(training_data_len), :]
+# 次の営業日を返す
+def next_business_day(date: str):
+    cur_date = datetime.datetime.strptime(date, "%Y-%m-%d")
+    while True:
+        cur_date = cur_date + datetime.timedelta(days=1)
+        if cur_date.weekday() < 5 and not jpholiday.is_holiday(cur_date):
+            return datetime.datetime.strftime(cur_date, "%Y-%m-%d")
 
-        # train_dataをx_trainとy_trainに分ける
-        x_train, y_train = [], []
-        for i in range(window_size, len(train_data)):
-            x_train.append(train_data[i - window_size:i, 0])
-            y_train.append(train_data[i, 0])
+def estimate(stock_df: pl.DataFrame, out_file: str, model_file='', window_size=128, show_figure=False, *discard):
+    """
+    LSTMによる推定を行う。
+    一定期間(window_size日数分)の終値をもとに、次の日の終値を推定する。
+    与えられたデータの後半20%を用いて推定値を出し、評価値も出す。
 
-        # numpy arrayに変換
-        x_train, y_train = np.array(x_train), np.array(y_train)
-        x_train = np.reshape(x_train, (x_train.shape[0], x_train.shape[1], 1))
+    stock_df : DataFrame
+                推定のもととなる株価データ
+                必要な列 : 'Date', 'Code', 'Close'
 
-        model = Sequential()
-        model.add(LSTM(units=50,return_sequences=True,input_shape=(x_train.shape[1], 1)))
-        model.add(Dropout(0.25))
-        model.add(LSTM(units=50,return_sequences=True))
-        model.add(Dropout(0.25))
-        model.add(LSTM(units=50,return_sequences=True))
-        model.add(Dropout(0.25))
-        model.add(LSTM(units=50))
-        model.add(Dropout(0.25))
-        model.add(Dense(units=1))
+    out_file : str
+                推定結果の出力先ファイル名
 
-        print('コンパイル開始（初回）')
-        model.compile(optimizer='adam', loss='mean_squared_error', metrics=['accuracy'])
-        # TensorFlowのログを出力
-        # 保存先ディレクトリがない場合は作成
-        #import datetime
-        #from pathlib import Path
-        #dir_name = os.path.join(os.path.dirname(__file__), '../../../log/fit/', str(datetime.datetime.now().strftime("%Y%m%d-%H%M%S")))
-        #dir = Path(dir_name)
-        #dir.mkdir(parents=True, exist_ok=True)
-        #profile_start_step = int(x_train.shape[0] * 1.5)
-        #tensorboard_callback = tf.keras.callbacks.TensorBoard(
-        #    log_dir=dir_name,
-        #    histogram_freq=1,
-        #    profile_batch='100, 120')
-        #history = model.fit(x_train, y_train, batch_size=32, epochs=100, verbose=0, callbacks=[tensorboard_callback])
-        history = model.fit(x_train, y_train, batch_size=32, epochs=100)
-        
-        # テストデータ(残り20%)作成
-        test_data = scaled_closes[training_data_len - window_size:, :]
-        #test_data = scaled_Y
+    model_file : str, default=''
+                LSTMのモデル（fit済）が保存されたファイル名。存在する場合は読み込んで推定値を出す。
+                空文字列を指定した場合は新規にモデルを構築する。（時間がかかる）
 
-        x_test = []
-        y_test = closes[training_data_len:, :]
-        for i in range(window_size, len(test_data)):
-            x_test.append(test_data[i-window_size:i, 0])
+    window_size : int, default=128
+                何日間の終値を元に次の日の終値を推定するか
 
-        # numpy arrayに変換
-        x_test = np.array(x_test)
-        x_test = np.reshape(x_test, (x_test.shape[0], x_test.shape[1], 1))
+    show_figure : bool, default=False
+                実際のデータと推定値の比較用グラフを出力するか
+    """
 
-        #logger.info('x_test.shape:' + str(x_test.shape))
-        #logger.info('y_test.shape:' + str(y_test.shape))
-        
-        predictions = model.predict(x_test)
-        predictions = scaler.inverse_transform(predictions)
-        #logger.info('predictions.shape:' + str(predictions.shape))
+    code = stock_df.get_column('Code')[0]
+    closes = stock_df['Close'].to_numpy().reshape(-1, 1)
+    # データを0~1の範囲に正規化
+    scaled_closes = scaler.fit_transform(closes)
+    # モデル読み込み
+    if model_file != '':
+        try:
+            model = tf.keras.models.load_model(model_file)
+        except IOError:
+            logger.info('モデルを読み込めませんでした。新たにモデルを構築します。')
+            model = build_model(scaled_closes, code, model_file, window_size)
+    else:
+        model = build_model(scaled_closes, code, model_file, window_size)
+    # モデル作成に失敗した場合はそのままreturn
+    if model is None:
+        logger.error('モデル構築に失敗しました。')
+        return
 
-        # RMSE(二乗平均平方根誤差、0に近いほど良い)
-        rmse = np.sqrt(np.mean((predictions - y_test) ** 2))
-        print(f'RMSE:{rmse}')
+    # テストデータ(残り20%)作成
+    training_data_len = int(np.ceil(len(scaled_closes) * .8))
+    test_data = scaled_closes[training_data_len - window_size:, :]
 
-        # モデル保存
-        #model.save(self.filename)
+    x_test = []
+    y_test = closes[training_data_len:, :]
+    for i in range(window_size, len(test_data)):
+        x_test.append(test_data[i-window_size:i, 0])
 
-        # 可視化
-        real = stock_df.select(['Date', 'Close'])
-        real = real.with_columns(pl.lit('Real').alias('Name'))
-        predict_date = stock_df[training_data_len:].get_column('Date')
-        predict = pl.from_numpy(predictions, schema=['Close'])
-        predict = predict.with_columns(predict_date, pl.lit('Predict').alias('Name'))
-        predict = predict.with_columns(pl.col('Close').cast(pl.Float64))
-        df = pl.concat([real, predict.select(['Date', 'Close', 'Name'])])
+    # numpy arrayに変換
+    x_test = np.array(x_test)
+    x_test = np.reshape(x_test, (x_test.shape[0], x_test.shape[1], 1))
+    
+    predictions = model.predict(x_test)
+    predictions = scaler.inverse_transform(predictions)
+
+    # RMSE(二乗平均平方根誤差、0に近いほど良い)
+    rmse = np.sqrt(np.mean((predictions - y_test) ** 2))
+    logger.info(f'[{code}]RMSE:{rmse}')
+
+    # 評価用ではなく、与えられたデータにない次の日の推測値を出す
+    x_predict = [test_data[len(test_data)-window_size:len(test_data), 0]]
+    # numpy arrayに変換
+    x_predict = np.array(x_predict)
+    x_predict = np.reshape(x_predict, (x_predict.shape[0], x_predict.shape[1], 1))
+    prediction_newday = model.predict(x_predict)
+    prediction_newday = scaler.inverse_transform(prediction_newday)
+    predictions = np.append(predictions, prediction_newday, axis=0)
+
+    real = stock_df.select(['Date', 'Close'])
+    real = real.with_columns(pl.lit('Real').alias('Name'))
+    predict_date = stock_df[training_data_len:].get_column('Date')
+    # 最後の次の日も追加
+    predict_date.append(pl.Series('Date', [next_business_day(predict_date[-1])]))
+    predict = pl.from_numpy(predictions, schema=['Close'])
+    predict = predict.with_columns(predict_date, pl.lit('Predict').alias('Name'))
+    predict = predict.with_columns(pl.col('Close').cast(pl.Float64))
+    predict = predict.select(['Date', 'Close', 'Name'])
+    # 可視化
+    if show_figure:
+        df = pl.concat([real, predict])
         fig = px.line(x=df['Date'], y=df['Close'], color=df['Name'])
         fig.show()
 
-        return True
+    # 予想を出力        
+        out_list = []
+        prev_close = predict.get_column('Close')[0]
+        # TODO: iter_rows()は非推奨
+        for row in predict.iter_rows():
+            if row[1] > 0:
+                # TODO: 出力するスコアは要検討
+                out_list.append({"date": row[0], "code": code, "gains": row[1] - prev_close, "score": -rmse, "yest_close": prev_close})
+        prev_close = row[1]
+        output = {
+            "code": code,
+            "method_name": name(),
+            "version": version(),
+            "last_date": stock_df.get_column('Date')[-1],
+            "estimate": out_list,
+        }
+        # ファイル出力
+        with open(out_file, 'w') as f:
+            json.dump(output, f, indent=2)
 
-'''
-    def compile(self, delta_X, delta_Y, last_date: pd.Timestamp, *discard):
-        logger.info('compile [' + str(self.code) + ']' + str(delta_X))
-        # 日数を結合
-        self.days = pd.concat([self.days, delta_X])
-        # どれくらいの期間をもとに予測するか
-        window_size = 60
-        # データ数が足りなければ終了
-        if len(self.scaled_Y) <= window_size:
-            self.msr = 10000
-            logger.info('[' + str(self.code) + ']cannot learn because few data')
-            return
-        training_data_begin = len(self.scaled_Y) - window_size
-        Y = self.scaler.inverse_transform(self.scaled_Y)
-        Y = np.concatenate([Y, delta_Y.to_numpy().reshape(-1, 1)])
-        # データを0-1に正規化
-        self.scaled_Y = self.scaler.fit_transform(Y)
+def build_model(scaled_closes: np.ndarray, code: str, model_file='', window_size=128):
+    # 全体の80%をトレーニングデータとして扱う
+    training_data_len = int(np.ceil(len(scaled_closes) * .8))
+    # データ数が足りなければ終了
+    if training_data_len <= window_size:
+        logger.info(f'[{code}]データ数が足りないため学習できませんでした。')
+        return None
 
-        # モデル読み込み
-        try:
-            model = tf.keras.models.load_model(self.modelfile)
-        except IOError:
-            print('model is none')
-            self.first_compile(Y)
-            return
+    train_data = scaled_closes[0:int(training_data_len), :]
 
-        # 渡された差分の100%をトレーニングデータとして扱う
-        training_data_len = int(np.ceil(len(Y) * 1.0))
-        #training_data_len = int(np.ceil(len(Y) * 1.0))
+    # train_dataをx_trainとy_trainに分ける
+    x_train, y_train = [], []
+    for i in range(window_size, len(train_data)):
+        x_train.append(train_data[i - window_size:i, 0])
+        y_train.append(train_data[i, 0])
 
-        train_data = self.scaled_Y[training_data_begin:int(training_data_len), :]
+    # numpy arrayに変換
+    x_train, y_train = np.array(x_train), np.array(y_train)
+    x_train = np.reshape(x_train, (x_train.shape[0], x_train.shape[1], 1))
 
-        # train_dataをx_trainとy_trainに分ける
-        x_train = []
-        y_train = train_data[window_size:, :]
-        for i in range(window_size, len(train_data)):
-            x_train.append(train_data[i - window_size:i, 0])
+    model = Sequential()
+    model.add(LSTM(units=50,return_sequences=True,input_shape=(x_train.shape[1], 1)))
+    model.add(Dropout(0.25))
+    model.add(LSTM(units=50,return_sequences=True))
+    model.add(Dropout(0.25))
+    model.add(LSTM(units=50,return_sequences=True))
+    model.add(Dropout(0.25))
+    model.add(LSTM(units=50))
+    model.add(Dropout(0.25))
+    model.add(Dense(units=1))
 
-        # numpy arrayに変換
-        x_train, y_train = np.array(x_train), np.array(y_train)
-        logger.info('[' + str(self.code) + ']x_train.shape:' + str(x_train.shape) + ' y_train.shape:' + str(y_train.shape))
-        x_train = np.reshape(x_train, (x_train.shape[0], x_train.shape[1], 1))
+    print('コンパイル開始（初回）')
+    model.compile(optimizer='adam', loss='mean_squared_error', metrics=['accuracy'])
+    history = model.fit(x_train, y_train, batch_size=32, epochs=50)
+    # モデル保存
+    filename = model_file
+    if filename == '':
+        filename = model_file_default + '_' + code
+    model.save(filename)
+    return model
 
-        history = model.fit(x_train, y_train, batch_size=32, epochs=100, verbose=0)
-        
-        # モデル保存
-        model.save(self.modelfile)
-'''
-        
-'''
-        # テストデータ(残り20%)作成
-        test_data = self.scaled_Y[training_data_len - window_size:, :]
-        #test_data = scaled_Y
+def estimate_gen(input='', output='', stock_info_file='', filter_market_code=0, force_build_model=False, show_figure=False):
+    """
+    【ジェネレータ】LSMAによる推定を行う
 
-        x_test = []
-        y_test = Y[training_data_len:, :]
-        for i in range(window_size, len(test_data)):
-            x_test.append(test_data[i-window_size:i, 0])
+    input : str, default=''
+            株価データが保存されたファイルまたはディレクトリ
 
-        # numpy arrayに変換
-        x_test = np.array(x_test)
-        x_test = np.reshape(x_test, (x_test.shape[0], x_test.shape[1], 1))
+    output : str, default=''
+            推定結果の出力ファイル。ただし、inputの対象が1ファイルのときのみ有効
 
-        logger.info('x_test.shape:' + str(x_test.shape))
-        logger.info('y_test.shape:' + str(y_test.shape))
-        
-        predictions = self.model.predict(x_test)
-        predictions = self.scaler.inverse_transform(predictions)
-        logger.info('predictions.shape:' + str(predictions.shape))
-'''
+    stock_info_file : str, default=''
+            全銘柄の情報（銘柄名や市場コード等）が記載されたCSVファイル
 
-'''
-        # MSR(平均二乗差)
-        # self.msr = np.mean((predictions - y_test) ** 2)
-        self.last_date = last_date
-        
-    def predict(self, days):
-        window_size = 60
-        x_test = []
-        test_data = self.scaled_Y
-        # 実データから作成(+1日まで)
-        for i in range(window_size, len(test_data) + 1):
-            x_test.append(test_data[i-window_size:i, 0])
-        x_test = np.array(x_test)
-        x_test = np.reshape(x_test, (x_test.shape[0], x_test.shape[1], 1))
-        # モデル読み込み
-        model = tf.keras.models.load_model(self.modelfile)
-        predictions = model.predict(x_test)
-        # モデルの予想値を含めて作成
-        for i in range(len(test_data) + 1, len(test_data) + days):
-            test_data = np.append(test_data, predictions[-1])
-            test_data = np.reshape(test_data, (test_data.shape[0], 1))
-            x_test_one = []
-            x_test_one.append(test_data[i-window_size:i, 0])
-            x_test_one = np.array(x_test_one)
-            x_test_one = np.reshape(x_test_one, (x_test_one.shape[0], x_test_one.shape[1], 1))
-            predictions = np.append(predictions, model.predict(x_test_one))
-            predictions = np.reshape(predictions, (predictions.shape[0], 1))
-        logger.info('predictions.shape:' + str(predictions.shape))
-        # 正規化を元に戻す
-        y_hat = self.scaler.inverse_transform(predictions)
-        # 1次元化
-        y_hat = y_hat.ravel()
-        first_day = self.days.iloc[0] + window_size
-        last_day = self.days.iloc[-1] + window_size + days
-        ret_days = np.arange(first_day, last_day + 1, 1)
-        return (ret_days, y_hat)
-'''
+    filter_market_code : int, default=0
+            市場コードによるフィルタ。0の場合はフィルタリングしない
 
-def set_argparse():
-    parser = argparse.ArgumentParser(description='LSTMで予想を出す')
-    parser.add_argument('input', help='株価データが保存されたファイルまたはディレクトリ')
-    parser.add_argument('-o', '--output', help='予想の出力ファイル。ただし、inputの対象が1ファイルのときのみ有効', default='')
-    args = parser.parse_args()
-    return args
+    force_build_model : bool, default=False
+            必ず新規でモデルを構築するかどうか
 
-def main():
-    args = set_argparse()
-    data_files = []
-    '''
-    if os.path.isdir(args.input):
-        data_files = glob.glob(args.input + '/*.parquet')
+    show_figure : bool, default=False
+            実際のデータと推定値の比較用グラフを出力するか
+
+    戻り値 : list
+            index0 : 処理が終了したインデックス。 index1 : 処理総数
+    """
+    input_internal = input
+    if input_internal == '':
+        input_internal = input_directory_default
+    # 銘柄情報ファイル読み込み
+    stock_info_file_internal = stock_info_file
+    if stock_info_file_internal == '':
+        stock_info_file_internal = stock_info_file_default
+    try:
+        stock_info_df = pl.read_csv(stock_info_file_internal)
+    except:
+        print('銘柄情報データファイルの読み込みに失敗しました')
+        sys.exit(1)
+    if os.path.isdir(input_internal):
+        data_files = glob.glob(input_internal + '/*.parquet')
     else:
-        data_files = [args.input]
-    '''
-    data_files = [args.input]
+        data_files = [input_internal]
 
-    for index in tqdm.tqdm(range(len(data_files))):
-        data_file = data_files[index]
+    # 市場コードでフィルタリング
+    filtered_stock_dfs = []
+    for data_file in data_files:
         # 株価データ読み込み
         try:
             stock_df = pl.read_parquet(data_file)
         except:
             print('株価データファイルの読み込みに失敗しました')
             sys.exit(1)
-        '''
+        code = stock_df.get_column('Code')[0]
+        market_code = stock_info_df.filter(pl.col('Code') == code).get_column('MarketCode')[0]
+        if filter_market_code == 0 or market_code == filter_market_code:
+            filtered_stock_dfs.append(stock_df)
+
+    for index in tqdm.tqdm(range(len(filtered_stock_dfs))):
+        stock_df = filtered_stock_dfs[index]
+        code = stock_df.get_column('Code')[0]
         # 出力先ファイル決定
-        out_strategy_file = args.output
-        if out_strategy_file == '' or len(data_files) > 1:
+        out_estimate_file = output
+        if out_estimate_file == '' or len(data_files) > 1:
             # 保存先ディレクトリがない場合は作成
             dir = Path(out_estimate_directory_default)
             dir.mkdir(parents=True, exist_ok=True)
-            out_strategy_file = os.path.join(
-                out_estimate_directory_default, os.path.splitext(os.path.basename(data_file))[0]
+            out_estimate_file = os.path.join(
+                out_estimate_directory_default, code
             ) + '.json'
-        '''
-        code = stock_df.get_column('Code')[0]
-        model = model_3(code, f'model_lstm_{code}')
-        model.first_compile(stock_df)
 
-        #estimate(stock_df, out_strategy_file)
+        model_file = model_file_default + '_' + code
+        if force_build_model:
+            model_file = ''
+        estimate(stock_df, out_estimate_file, model_file=model_file, show_figure=show_figure)
+        yield [index, len(filtered_stock_dfs)]
+
+def set_argparse():
+    parser = argparse.ArgumentParser(description='LSTMで予想を出す')
+    parser.add_argument('input', help='株価データが保存されたファイルまたはディレクトリ')
+    parser.add_argument('-m', '--filter_market_code', help='inputで指定したディレクトリ内の株価データを市場コードでフィルタリング', type=int, default=0)
+    parser.add_argument('--stock_info', help='全銘柄の情報（銘柄名や市場コード等）が記載されたCSVファイル', default='')
+    parser.add_argument('--force_build_model', help='必ず新規でモデルを構築する。このオプションを付けない場合はモデルが保存されたディレクトリがある場合はそのファイルからモデルを読み込む', action='store_true')
+    parser.add_argument('--show_figure', help='実際のデータと推定値の比較用グラフを出力する。各銘柄ごとに出力されるため、inputにディレクトリを指定している場合は注意', action='store_true')
+    parser.add_argument('-o', '--output', help='予想の出力ファイル。ただし、inputの対象が1ファイルのときのみ有効', default='')
+    args = parser.parse_args()
+    return args
+
+def main():
+    args = set_argparse()
+    for i in estimate_gen(args.input, args.output, args.stock_info, args.filter_market_code, args.force_build_model, args.show_figure):
+        pass
 
     sys.exit(0)
 

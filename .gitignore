@@ -7,3 +7,4 @@ log/*
 private/*
 db/*
 settings/*
+model/*

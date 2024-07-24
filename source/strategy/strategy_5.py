@@ -7,6 +7,8 @@ import math
 from tqdm import tqdm
 import polars as pl
 import sys
+import datetime
+import jpholiday
 
 # 自作ロガー追加
 #import os
@@ -15,13 +17,24 @@ import sys
 #logger = Logger(__name__, 'analyze.log')
 
 stock_info_file_default = os.path.join(os.path.dirname(__file__), '../../db/stock_info.csv')
-out_order_directory_default = os.path.join(os.path.dirname(__file__), '../../db/orders/order_1')
+out_order_directory_default = os.path.join(os.path.dirname(__file__), '../../db/orders/order_5')
+
+# x営業日後を返す
+def next_business_day(date: str, days=1):
+    cur_date = datetime.datetime.strptime(date, "%Y-%m-%d")
+    past = 0
+    while past < days:
+        cur_date = cur_date + datetime.timedelta(days=1)
+        if cur_date.weekday() < 5 and not jpholiday.is_holiday(cur_date):
+            past = past + 1
+    
+    return datetime.datetime.strftime(cur_date, "%Y-%m-%d")
 
 def name():
     """
     戦略の名前
     """
-    return 'strategy1'
+    return 'strategy5'
 
 def version():
     """
@@ -31,7 +44,7 @@ def version():
 
 def strategy_gen(input: str, output='', base=1000000, stock_info_file='', filter_market_code=0, method_name=''):
     """
-    【ジェネレータ】各日利益が最大の銘柄1種を始値で買って予想利益分の差が出たら売る戦略で注文作成
+    【ジェネレータ】各日予想に対するスコアが最大の銘柄1種を始値で買って予想利益分の8割の差が出たら売る戦略で注文作成
 
     input : str, default=''
             予想データが保存されたファイルまたはディレクトリ
@@ -98,11 +111,11 @@ def strategy_gen(input: str, output='', base=1000000, stock_info_file='', filter
     print('注文作成準備・・・')
     for index in tqdm(range(len(estimates))):
         estimate = estimates[index]
-        gains = estimate['gains']
         date = estimate['date']
-        if math.floor(estimate['gains']) > 0 and estimate['yest_close'] * 100 <= base:
-            if date not in date_to_estimate or date_to_estimate[date]['gains'] < gains:
-                # 同じ日の注文なら利益が大きい方のみ残す
+        score = estimate['score']
+        if math.floor(estimate['gains'] * 0.8) > 0 and estimate['yest_close'] * 100 <= base:
+            if date not in date_to_estimate or date_to_estimate[date]['score'] < score:
+                # 同じ日の注文ならスコアが大きい方のみ残す
                 date_to_estimate[date] = estimate
     print('完了')
     print('注文作成・・・')
@@ -121,13 +134,16 @@ def strategy_gen(input: str, output='', base=1000000, stock_info_file='', filter
             "volume": -1    # 買えるだけ買う
         }
         orders.append(order)
-        # 買値との差がgainsを超えたら売る
+        # 買値との差がgainsの8割を超えたら売る
+        # 5営業日を超えても売れていない場合はgainsの0.5倍で売る
         order = {
             "date": estimate['date'],
-            "due": "max",
+            "due": next_business_day(estimate['date'], 5),
+            "due2": "max",
             "code": estimate['code'],
             "type": "sell-delta",
-            "value": math.floor(estimate['gains']),
+            "value": math.floor(estimate['gains'] * 0.8),
+            "value2": math.floor(estimate['gains'] * 0.5),
             "volume": -1    # 保持している分全て売る
         }
         orders.append(order)
@@ -147,7 +163,7 @@ def strategy_gen(input: str, output='', base=1000000, stock_info_file='', filter
     yield [len(estimates), len(estimates)+1]
 
 def set_argparse():
-    parser = argparse.ArgumentParser(description='利益が高い予想を元に売買指示を作成する')
+    parser = argparse.ArgumentParser(description='信頼度スコアが高い予想を元に売買指示を作成する')
     parser.add_argument('input', help='各予想ファイルが保存されたディレクトリ')
     parser.add_argument('-b', '--base', help='元金。この値で買える銘柄のみを注文として出力する', type=int, default=1000000)
     parser.add_argument('-m', '--filter_market_code', help='inputで指定したディレクトリ内の予想データを市場コードでフィルタリング', type=int, default=0)

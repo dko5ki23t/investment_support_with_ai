@@ -76,7 +76,10 @@ class OrdersDB:
             else:
                 self.date_to_orders_idx[order['date']] = [index]
                 self.date_sorted_list.append(date_to_num(order['date']))
-            order_due = copy.copy(order['due'])
+            if 'due2' in order:
+                order_due = copy.copy(order['due2'])
+            else:
+                order_due = copy.copy(order['due'])
             if order_due == 'max':   # maxが締切日として指定されている場合は今日までとする
                 order_due = d_to_str(datetime.datetime.today())
             if order_due in self.due_to_orders_idx:
@@ -154,6 +157,72 @@ def get_period_rolling(start: str, end: str, period: int):
     start_ends = [[all_days[i], all_days[i+period-1]] for i in range(0, len(all_days)-period+1, 1)]
     return start_ends
 
+# 銘柄購入時の処理
+def buy_stock(code: str, date: str, value: int, volume: int, holding_stocks: list, amount: int):
+    '''
+    volume 負数あり
+    '''
+    ret = amount
+    # 購入できる最大株数
+    volume_max = math.floor(amount / (value * 100)) * 100
+    # 100株以上買える場合のみ続ける
+    if volume_max >= 100:
+        # 実際に購入する株数
+        buy_volume = min(volume_max, volume)
+        # 負数が指定されている場合は買えるだけ買う
+        if volume < 0:
+            buy_volume = volume_max
+        # 保持している株に追加していく
+        # 保持している株にある場合（買い増し）
+        if code in holding_stocks:
+            holding_stock = holding_stocks[code]
+            holding_stock.hold_from = date
+            holding_stock.value_avg = (
+                (holding_stock.value_avg * holding_stock.volume) + (value * buy_volume)
+            ) / (
+                holding_stock.volume + buy_volume
+            )
+            holding_stock.volume = holding_stock.volume + buy_volume
+            holding_stocks[code] = holding_stock
+        # 保持している株にない場合（新規買い）
+        else:
+            holding_stock = HoldingStock()
+            holding_stock.hold_from = date
+            holding_stock.volume = buy_volume
+            holding_stock.value_avg = value
+            holding_stocks[code] = holding_stock
+        # 買付可能額編集
+        ret = amount - value * buy_volume
+        # 買った記録をログ出力
+        logger.info(f'{date}[{code}]買い {value} : {buy_volume}株 買付可能額 {ret}')
+    return ret
+    
+# 銘柄売却時の処理
+def sell_stock(code: str, date: str, value: int, volume: int, holding_stocks: list, amount: int):
+    ret_amount = amount
+    realized = 0
+    # 保持している株から削除していく
+    if code in holding_stocks:
+        holding_stock = holding_stocks.pop(code)
+        # 売却する株数
+        sell_volume = min(holding_stock.volume, volume)
+        # 負数が指定されている場合は売れるだけ売る
+        if volume < 0:
+            sell_volume = holding_stock.volume
+        # 決定した売却株数から損益を追加
+        realized = (value - holding_stock.value_avg) * sell_volume
+        # 売却した株数を減算
+        holding_stock.volume = holding_stock.volume - sell_volume
+        # まだ株が残っているなら再度dictに追加
+        if holding_stock.volume > 0:
+            holding_stocks[code] = holding_stock
+        # TODO: 上記時点でvalue_avgとか変化しないか？
+        # 買付可能額編集
+        ret_amount = amount + value * sell_volume
+        # 売った記録をログ出力
+        logger.info(f'{date}[{code}]売り {value} : {sell_volume}株 買付可能額 {ret_amount}')
+    return {'amount': ret_amount, 'realized': realized}
+
 # 指定された期間、元金でどのような損益結果が得られるかを評価する
 def evaluate(orders_db: OrdersDB, stock_data_dir: str, base: int, gains: int, start: datetime.datetime, end: datetime.datetime):
     # 株価データdict(code:DataFrame)
@@ -188,137 +257,48 @@ def evaluate(orders_db: OrdersDB, stock_data_dir: str, base: int, gains: int, st
             target_term_df = stock_df.filter(
                 pl.col('Date').str.strptime(pl.Date, "%Y-%m-%d") == target_date
             )
+            order_val = order['value']
+            # due2が設けられている場合かつdueを過ぎている場合(=due~due2の期間)は
+            # value2の値を用いる
+            if 'due2' in order and str_to_d(order['due']) < target_date:
+                order_val = order['value2']
             # 買いの場合
             if order['type'] == 'buy':
-                can_buy = target_term_df.filter(pl.col('Low') <= order['value'])
+                order_val = order['value']
+                can_buy = target_term_df.filter(pl.col('Low') <= order_val)
                 # 期間中に買値以下の値段になっているなら
                 if len(can_buy) > 0:
                     # 高値が買値よりも低いなら高値で買う
-                    buy_val = min(can_buy.get_column('High')[0], order['value'])
-                    # 購入できる最大株数
-                    volume_max = math.floor(amount / (buy_val * 100)) * 100
-                    # 100株以上買える場合のみ続ける
-                    if volume_max >= 100:
-                        # 実際に購入する株数
-                        buy_volume = min(volume_max, order['volume'])
-                        # 負数が指定されている場合は買えるだけ買う
-                        if order['volume'] < 0:
-                            buy_volume = volume_max
-                        # 保持している株に追加していく
-                        # 保持している株にある場合（買い増し）
-                        if code in holding_stocks:
-                            holding_stock = holding_stocks[code]
-                            holding_stock.hold_from = can_buy.get_column('Date')[0]
-                            holding_stock.value_avg = (
-                                (holding_stock.value_avg * holding_stock.volume) + (buy_val * buy_volume)
-                            ) / (
-                                holding_stock.volume + buy_volume
-                            )
-                            holding_stock.volume = holding_stock.volume + buy_volume
-                            holding_stocks[code] = holding_stock
-                        # 保持している株にない場合（新規買い）
-                        else:
-                            holding_stock = HoldingStock()
-                            holding_stock.hold_from = can_buy.get_column('Date')[0]
-                            holding_stock.volume = buy_volume
-                            holding_stock.value_avg = buy_val
-                            holding_stocks[code] = holding_stock
-                        # 買付可能額編集
-                        amount = amount - buy_val * buy_volume
-                        # 買った記録をログ出力
-                        logger.info(f'{can_buy.get_column("Date")[0]}[{code}]買い {buy_val} : {buy_volume}株 買付可能額 {amount}')
+                    buy_val = min(can_buy.get_column('High')[0], order_val)
+                    amount = buy_stock(code, can_buy.get_column('Date')[0], buy_val, order['volume'], holding_stocks, amount)
             # 始値買いの場合
             elif order['type'] == 'buy-open':
                 if len(target_term_df) > 0:
                     # 期間内最初の始値で買う
                     buy_val = target_term_df.get_column('Open')[0]
-                    # 購入できる最大株数
-                    volume_max = math.floor(amount / (buy_val * 100)) * 100
-                    # 100株以上買える場合のみ続ける
-                    if volume_max >= 100:
-                        # 実際に購入する株数
-                        buy_volume = min(volume_max, order['volume'])
-                        # 負数が指定されている場合は買えるだけ買う
-                        if order['volume'] < 0:
-                            buy_volume = volume_max
-                        # 保持している株に追加していく
-                        # 保持している株にある場合（買い増し）
-                        if code in holding_stocks:
-                            holding_stock = holding_stocks[code]
-                            holding_stock.hold_from = target_term_df.get_column('Date')[0]
-                            holding_stock.value_avg = (
-                                (holding_stock.value_avg * holding_stock.volume) + (buy_val * buy_volume)
-                            ) / (
-                                holding_stock.volume + buy_volume
-                            )
-                            holding_stock.volume = holding_stock.volume + buy_volume
-                            holding_stocks[code] = holding_stock
-                        # 保持している株にない場合（新規買い）
-                        else:
-                            holding_stock = HoldingStock()
-                            holding_stock.hold_from = target_term_df.get_column('Date')[0]
-                            holding_stock.volume = buy_volume
-                            holding_stock.value_avg = buy_val
-                            holding_stocks[code] = holding_stock
-                        # 買付可能額編集
-                        amount = amount - buy_val * buy_volume
-                        # 買った記録をログ出力
-                        logger.info(f'{target_term_df.get_column("Date")[0]}[{code}]買い {buy_val} : {buy_volume}株 買付可能額 {amount}')
+                    amount = buy_stock(code, target_term_df.get_column('Date')[0], buy_val, order['volume'], holding_stocks, amount)
             # 売りの場合
             elif order['type'] == 'sell':
-                can_sell = target_term_df.filter(pl.col('High') >= order['value'])
+                can_sell = target_term_df.filter(pl.col('High') >= order_val)
                 # 期間中に売値以上の値段になっているなら
                 if len(can_sell) > 0:
                     # 安値が売値よりも高いなら安値で売る
-                    sell_val = max(can_sell.get_column('Low')[0], order['value'])
-                    # 保持している株から削除していく
-                    if code in holding_stocks:
-                        holding_stock = holding_stocks.pop(code)
-                        # 売却する株数
-                        sell_volume = min(holding_stock.volume, order['volume'])
-                        # 負数が指定されている場合は売れるだけ売る
-                        if order['volume'] < 0:
-                            sell_volume = holding_stock.volume
-                        # 決定した売却株数から損益を追加
-                        realized_gains_loses = realized_gains_loses + (sell_val - holding_stock.value_avg) * sell_volume
-                        # 売却した株数を減算
-                        holding_stock.volume = holding_stock.volume - sell_volume
-                        # まだ株が残っているなら再度dictに追加
-                        if holding_stock.volume > 0:
-                            holding_stocks[code] = holding_stock
-                        # TODO: 上記時点でvalue_avgとか変化しないか？
-                        # 買付可能額編集
-                        amount = amount + sell_val * sell_volume
-                        # 売った記録をログ出力
-                        logger.info(f'{can_sell.get_column("Date")[0]}[{code}]売り {sell_val} : {sell_volume}株 買付可能額 {amount}')
+                    sell_val = max(can_sell.get_column('Low')[0], order_val)
+                    ret = sell_stock(code, can_sell.get_column("Date")[0], sell_val, order['volume'], holding_stocks, amount)
+                    amount = ret['amount']
+                    realized_gains_loses = realized_gains_loses + ret['realized']
             # 差分売りの場合
             elif order['type'] == 'sell-delta':
                 if code in holding_stocks:
-                    goal = holding_stocks[code].value_avg + order['value']
+                    goal = holding_stocks[code].value_avg + order_val
                     can_sell = target_term_df.filter(pl.col('High') >= goal)
                     # 期間中に保有株の平均取得値＋差分以上の値段になっているなら
                     if len(can_sell) > 0:
                         # 安値が売値よりも高いなら安値で売る
                         sell_val = max(can_sell.get_column('Low')[0], goal)
-                        # 保持している株から削除していく
-                        holding_stock = holding_stocks.pop(code)
-                        # 売却する株数
-                        sell_volume = min(holding_stock.volume, order['volume'])
-                        # 負数が指定されている場合は売れるだけ売る
-                        if order['volume'] < 0:
-                            sell_volume = holding_stock.volume
-                        # 決定した売却株数から損益を追加
-                        realized_gains_loses = realized_gains_loses + (sell_val - holding_stock.value_avg) * sell_volume
-                        # 売却した株数を減算
-                        holding_stock.volume = holding_stock.volume - sell_volume
-                        # まだ株が残っているなら再度dictに追加
-                        if holding_stock.volume > 0:
-                            holding_stocks[code] = holding_stock
-                        # TODO: 上記時点でvalue_avgとか変化しないか？
-                        # 買付可能額編集
-                        amount = amount + sell_val * sell_volume
-                        # 売った記録をログ出力
-                        logger.info(f'{can_sell.get_column("Date")[0]}[{code}]売り {sell_val} : {sell_volume}株 買付可能額 {amount}')
+                        ret = sell_stock(code, can_sell.get_column("Date")[0], sell_val, order['volume'], holding_stocks, amount)
+                        amount = ret['amount']
+                        realized_gains_loses = realized_gains_loses + ret['realized']
         target_date = target_date + datetime.timedelta(days=1)
     # 評価損益計算
     for k, v in holding_stocks.items():
@@ -340,6 +320,76 @@ def evaluate(orders_db: OrdersDB, stock_data_dir: str, base: int, gains: int, st
     print(realized_gains_loses)
     '''
 
+def evaluate_gen(input: str, stock_data_dir='', start='2016-01-01', period=20, base=1000000, gains=100000):
+    # 売買指示データ読み込み
+    try:
+        with open(input) as f:
+            orders = json.load(f)
+    except:
+        print('売買指示ファイルの読み込みに失敗しました')
+        sys.exit(1)
+    # 株価データファイルが保存されたディレクトリ決定
+    stock_data_dir_internal = stock_data_dir
+    if stock_data_dir_internal == '':
+        stock_data_dir_internal = stock_data_dir_default
+
+    # start~本日までの、period期間分の開始日・終了日の組リストを得る
+    start_ends = get_period_rolling(start, d_to_str(datetime.date.today()), period)
+    # 各期間ごとに評価を行う
+    total_period = len(start_ends)
+    # 日付->注文にアクセスできるデータベースを作成する
+    orders_db = OrdersDB(orders['orders'])
+    success_num = 0     # 目標利益に達した数
+    success_num2 = 0    # 目標利益に達した数（実現損益＋評価損益）
+    realized_list = []  # 実現損益リスト
+    realize_valuation_list = [] # 実現損益＋評価損益リスト
+    for index in tqdm.tqdm(range(total_period)):
+        valuation = 0
+        start_and_end = start_ends[index]
+        # 期間をログ出力
+        logger.info(f'---{d_to_str(start_and_end[0])} ~ {d_to_str(start_and_end[1])}---')
+        rets = evaluate(
+            orders_db, stock_data_dir_internal, base, gains,
+            start_and_end[0],
+            start_and_end[1]
+        )
+        holding_stocks = rets["holding_stocks"]
+        if holding_stocks is not None:
+            for k, v in holding_stocks.items():
+                logger.info(f"[{k}]評価損益：{v.valuation}")
+                valuation = valuation + v.valuation
+        realize_valuation_list.append(rets['realized'] + valuation)
+        realized_list.append(rets['realized'])
+        logger.info(f"実現損益：{rets['realized']}")
+        if rets['realized'] >= gains:
+            success_num = success_num + 1
+        if rets['realized'] + valuation >= gains:
+            success_num2 = success_num2 + 1
+        yield [index, total_period+1]
+    # 横軸=終了日時、縦軸=実現損益のグラフ作成
+    ends = [e[1] for e in start_ends]
+    fig_df = pl.DataFrame({'Date': ends, 'Realized': realized_list})
+    fig_df = fig_df.with_columns(pl.lit('実現損益').alias('Name'))
+    # 横軸=終了日時、縦軸=実現損益+評価損益のグラフ作成
+    fig_df2 = pl.DataFrame({'Date': ends, 'Realized': realize_valuation_list})
+    fig_df2 = fig_df2.with_columns(pl.lit('実現損益＋評価損益').alias('Name'))
+    # 目標額の直線
+    goal_df = pl.DataFrame({'Date': ends})
+    goal_df = goal_df.with_columns(pl.lit(gains).cast(pl.Float64).alias('Realized'), pl.lit('目標損益').alias('Name'))
+    # 連結
+    fig_df = pl.concat([fig_df, fig_df2, goal_df])
+    fig = px.line(x=fig_df['Date'], y=fig_df['Realized'], labels={'x': '期間終了日', 'y': '実現損益(円)'}, color=fig_df['Name'])
+    fig.show()
+    print(f'目標達成率：{(success_num / total_period) * 100}% ({success_num}/{total_period})')
+    logger.info(f'目標達成率：{(success_num / total_period) * 100}% ({success_num}/{total_period})')
+    print(f'平均：{statistics.mean(realized_list)} 最大：{max(realized_list)} 最小：{min(realized_list)} 中央：{statistics.median(realized_list)}')
+    logger.info(f'平均：{statistics.mean(realized_list)} 最大：{max(realized_list)} 最小：{min(realized_list)} 中央：{statistics.median(realized_list)}')
+    print(f'目標達成率（実現損益＋評価損益）：{(success_num2 / total_period) * 100}% ({success_num2}/{total_period})')
+    logger.info(f'目標達成率（実現損益＋評価損益）：{(success_num2 / total_period) * 100}% ({success_num2}/{total_period})')
+    print(f'平均：{statistics.mean(realize_valuation_list)} 最大：{max(realize_valuation_list)} 最小：{min(realize_valuation_list)} 中央：{statistics.median(realize_valuation_list)}')
+    logger.info(f'平均：{statistics.mean(realize_valuation_list)} 最大：{max(realize_valuation_list)} 最小：{min(realize_valuation_list)} 中央：{statistics.median(realize_valuation_list)}')
+    yield [total_period, total_period+1]
+
 def set_argparse():
     parser = argparse.ArgumentParser(description='実データを用いて対象の売買を評価する')
     parser.add_argument('input', help='売買指示データが保存されたファイル')
@@ -353,58 +403,9 @@ def set_argparse():
 
 def main():
     args = set_argparse()
-    # 売買指示データ読み込み
-    try:
-        with open(args.input) as f:
-            orders = json.load(f)
-    except:
-        print('売買指示ファイルの読み込みに失敗しました')
-        sys.exit(1)
-    # 株価データファイルが保存されたディレクトリ決定
-    stock_data_dir = args.data
-    if stock_data_dir == '':
-        stock_data_dir = stock_data_dir_default
-
-    # start~本日までの、period期間分の開始日・終了日の組リストを得る
-    start_ends = get_period_rolling(args.start, d_to_str(datetime.date.today()), args.period)
-    # 各期間ごとに評価を行う
-    total_period = len(start_ends)
-    # 日付->注文にアクセスできるデータベースを作成する
-    orders_db = OrdersDB(orders['orders'])
-    success_num = 0     # 目標利益に達した数
-    realized_list = []  # 実現損益リスト
-    for index in tqdm.tqdm(range(total_period)):
-        start_and_end = start_ends[index]
-        # 期間をログ出力
-        logger.info(f'---{d_to_str(start_and_end[0])} ~ {d_to_str(start_and_end[1])}---')
-        rets = evaluate(
-            orders_db, stock_data_dir, args.base, args.gains,
-            start_and_end[0],
-            start_and_end[1]
-        )
-        holding_stocks = rets["holding_stocks"]
-        if holding_stocks is not None:
-            for k, v in holding_stocks.items():
-                logger.info(f"[{k}]評価損益：{v.valuation}")
-        realized_list.append(rets['realized'])
-        logger.info(f"実現損益：{rets['realized']}")
-        if rets['realized'] >= args.gains:
-            success_num = success_num + 1
-    # 横軸=終了日時、縦軸=実現損益のグラフ作成
-    ends = [e[1] for e in start_ends]
-    fig_df = pl.DataFrame({'Date': ends, 'Realized': realized_list})
-    fig_df = fig_df.with_columns(pl.lit('実現損益').alias('Name'))
-    # 目標額の直線
-    goal_df = pl.DataFrame({'Date': ends})
-    goal_df = goal_df.with_columns(pl.lit(args.gains).cast(pl.Float64).alias('Realized'), pl.lit('目標損益').alias('Name'))
-    # 連結
-    fig_df = pl.concat([fig_df, goal_df])
-    fig = px.line(x=fig_df['Date'], y=fig_df['Realized'], labels={'x': '期間終了日', 'y': '実現損益(円)'}, color=fig_df['Name'])
-    fig.show()
-    print(f'目標達成率：{(success_num / total_period) * 100}% ({success_num}/{total_period})')
-    logger.info(f'目標達成率：{(success_num / total_period) * 100}% ({success_num}/{total_period})')
-    print(f'平均：{statistics.mean(realized_list)} 最大：{max(realized_list)} 最小：{min(realized_list)} 中央：{statistics.median(realized_list)}')
-    logger.info(f'平均：{statistics.mean(realized_list)} 最大：{max(realized_list)} 最小：{min(realized_list)} 中央：{statistics.median(realized_list)}')
+    for i in evaluate_gen(args.input, args.data, args.start, args.period, args.base, args.gains):
+        pass
+    sys.exit(0)
 
 if __name__ == "__main__":
     main()
