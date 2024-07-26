@@ -138,24 +138,24 @@ def estimate(stock_df: pl.DataFrame, out_file: str, model_file='', window_size=1
         fig.show()
 
     # 予想を出力        
-        out_list = []
-        prev_close = predict.get_column('Close')[0]
-        # TODO: iter_rows()は非推奨
-        for row in predict.iter_rows():
-            if row[1] > 0:
-                # TODO: 出力するスコアは要検討
-                out_list.append({"date": row[0], "code": code, "gains": row[1] - prev_close, "score": -rmse, "yest_close": prev_close})
-        prev_close = row[1]
-        output = {
-            "code": code,
-            "method_name": name(),
-            "version": version(),
-            "last_date": stock_df.get_column('Date')[-1],
-            "estimate": out_list,
-        }
-        # ファイル出力
-        with open(out_file, 'w') as f:
-            json.dump(output, f, indent=2)
+    out_list = []
+    prev_close = predict.get_column('Close')[0]
+    # TODO: iter_rows()は非推奨
+    for row in predict.iter_rows():
+        if row[1] > 0:
+            # TODO: 出力するスコアは要検討
+            out_list.append({"date": row[0], "code": code, "gains": row[1] - prev_close, "score": -rmse, "yest_close": prev_close})
+    prev_close = row[1]
+    output = {
+        "code": code,
+        "method_name": name(),
+        "version": version(),
+        "last_date": stock_df.get_column('Date')[-1],
+        "estimate": out_list,
+    }
+    # ファイル出力
+    with open(out_file, 'w') as f:
+        json.dump(output, f, indent=2)
 
 def build_model(scaled_closes: np.ndarray, code: str, model_file='', window_size=128):
     # 全体の80%をトレーニングデータとして扱う
