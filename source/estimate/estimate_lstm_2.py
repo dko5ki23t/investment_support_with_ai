@@ -25,6 +25,9 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '../logger'))
 from logger import Logger
 logger = Logger(__name__, 'model_lstm_2.log')
 
+# 機械学習の乱数シードを固定
+tf.random.set_seed(1234)
+
 input_directory_default = os.path.join(os.path.dirname(__file__), '../../db/stock_data')
 stock_info_file_default = os.path.join(os.path.dirname(__file__), '../../db/stock_info.csv')
 out_estimate_directory_default = os.path.join(os.path.dirname(__file__), '../../db/estimates/estimate_lstm_2')
@@ -106,6 +109,7 @@ def estimate(stock_df: pl.DataFrame, out_file: str, model_file='', window_size=1
 
     x_test = []
     y_test = deltas[training_data_len:, :]
+    scaled_y_test = scaled_deltas[training_data_len:, :]
     for i in range(window_size, len(test_data_x)):
         x_test.append(test_data_x[i-window_size:i, 0])
 
@@ -113,12 +117,14 @@ def estimate(stock_df: pl.DataFrame, out_file: str, model_file='', window_size=1
     x_test = np.array(x_test)
     x_test = np.reshape(x_test, (x_test.shape[0], x_test.shape[1], 1))
 
-    predictions = model.predict(x_test)
-    predictions = scaler2.inverse_transform(predictions)
+    scaled_predictions = model.predict(x_test)
+    predictions = scaler2.inverse_transform(scaled_predictions)
 
     # RMSE(二乗平均平方根誤差、0に近いほど良い)
     rmse = np.sqrt(np.mean((predictions - y_test) ** 2))
     logger.info(f'[{code}]RMSE:{rmse}')
+    rmse2 = np.sqrt(np.mean((scaled_predictions - scaled_y_test) ** 2))
+    logger.info(f'[{code}]RMSE2:{rmse2}')
 
     # 評価用ではなく、与えられたデータにない次の日の推測値を出す
     x_predict = [test_data_x[len(test_data_x)-window_size:len(test_data_x), 0]]
@@ -148,13 +154,25 @@ def estimate(stock_df: pl.DataFrame, out_file: str, model_file='', window_size=1
     out_list = []
     prev_close = stock_df.filter(pl.col('Date') == predict.get_column('Date')[0]).get_column('Close')[0]
     # TODO: iter_rows()は非推奨
+    i = 0
     for row in predict.iter_rows():
         if row[1] > 0:
-            # TODO: 出力するスコアは要検討
-            out_list.append({"date": row[0], "code": code, "gains": row[1], "score": -rmse, "yest_close": prev_close})
-            tmp = stock_df.filter(pl.col('Date') == row[0])
-            if len(tmp) > 0:
-                prev_close = tmp.get_column('Close')[0]
+            # 過去20日分のRMSE(二乗平均平方根誤差、0に近いほど良い)
+            rmse3 = rmse
+            rmse4 = rmse2
+            if i > 0:
+                s = max(i-20, 0)
+                rmse3 = np.sqrt(np.mean((predictions[s:i] - y_test[s:i]) ** 2))
+                rmse4 = np.sqrt(np.mean((scaled_predictions[s:i] - scaled_y_test[s:i]) ** 2))
+            out_list.append({
+                "date": row[0], "code": code, "gains": row[1],
+                "score": -rmse, "score2": -rmse2, "score3": -rmse3,
+                "score4": -rmse4, "yest_close": prev_close
+            })
+        tmp = stock_df.filter(pl.col('Date') == row[0])
+        if len(tmp) > 0:
+            prev_close = tmp.get_column('Close')[0]
+        i = i + 1
     output = {
         "code": code,
         "method_name": name(),

@@ -11,11 +11,16 @@ import estimate.estimate_sma as estimate_sma
 import estimate.estimate_lstm as estimate_lstm_1
 import estimate.estimate_lstm_2 as estimate_lstm_2
 import estimate.estimate_lstm_3 as estimate_lstm_3
+import estimate.estimate_lstm_4 as estimate_lstm_4
+import estimate.estimate_lstm_5 as estimate_lstm_5
 import strategy.strategy_1 as strategy_1
 import strategy.strategy_2 as strategy_2
 import strategy.strategy_3 as strategy_3
 import strategy.strategy_4 as strategy_4
 import strategy.strategy_5 as strategy_5
+import strategy.strategy_6 as strategy_6
+import strategy.strategy_7 as strategy_7
+import strategy.strategy_8 as strategy_8
 import evaluate.evaluate as evaluate
 
 app = Flask(__name__)
@@ -37,12 +42,16 @@ estimate_method_to_module = {
     'LSTM1': estimate_lstm_1,
     'LSTM2': estimate_lstm_2,
     'LSTM3': estimate_lstm_3,
+    'LSTM4': estimate_lstm_4,
+    'LSTM5': estimate_lstm_5,
 }
 estimate_method_to_directory = {
     'SMA': os.path.join(estimate_default_root, 'estimate_sma'),
     'LSTM1': os.path.join(estimate_default_root, 'estimate_lstm_1'),
     'LSTM2': os.path.join(estimate_default_root, 'estimate_lstm_2'),
     'LSTM3': os.path.join(estimate_default_root, 'estimate_lstm_3'),
+    'LSTM4': os.path.join(estimate_default_root, 'estimate_lstm_4'),
+    'LSTM5': os.path.join(estimate_default_root, 'estimate_lstm_5'),
 }
 
 strategy_default_root = os.path.join(os.path.dirname(__file__), '../../db/orders/')
@@ -52,6 +61,9 @@ strategy_method_to_module = {
     'strategy3': strategy_3,
     'strategy4': strategy_4,
     'strategy5': strategy_5,
+    'strategy6': strategy_6,
+    'strategy7': strategy_7,
+    'strategy8': strategy_8,
 }
 strategy_method_to_directory = {
     'strategy1': os.path.join(strategy_default_root, 'order_1'),
@@ -59,6 +71,9 @@ strategy_method_to_directory = {
     'strategy3': os.path.join(strategy_default_root, 'order_3'),
     'strategy4': os.path.join(strategy_default_root, 'order_4'),
     'strategy5': os.path.join(strategy_default_root, 'order_5'),
+    'strategy6': os.path.join(strategy_default_root, 'order_6'),
+    'strategy7': os.path.join(strategy_default_root, 'order_7'),
+    'strategy8': os.path.join(strategy_default_root, 'order_8'),
 }
 
 @app.route('/fetch', methods=['POST'])
@@ -85,10 +100,16 @@ def estimate():
 #        return abort(400)
     method = request.form['method']
     filter_market = request.form['filter_market']
+    rebuild_model = (request.form['rebuild_model']).lower() == 'true'
     filter_market_code = 0
     if filter_market in market_to_code:
         filter_market_code = market_to_code[filter_market]
-    socketio.start_background_task(target=estimate_task(method=method, filter_market_code=filter_market_code))
+    socketio.start_background_task(
+        target=estimate_task(
+            method=method,
+            filter_market_code=filter_market_code,
+            rebuild_model=rebuild_model
+        ))
     return "estimate started", 202
     
 @app.route('/estimate/methods', methods=['GET'])
@@ -105,8 +126,8 @@ def get_estimate_filter_markets():
     }
     return jsonify(data)
 
-def estimate_task(method: str, filter_market_code = 0):
-    for i in estimate_method_to_module[method].estimate_gen('', '', filter_market_code=filter_market_code):
+def estimate_task(method: str, filter_market_code = 0, rebuild_model = False):
+    for i in estimate_method_to_module[method].estimate_gen('', '', filter_market_code=filter_market_code, force_build_model=rebuild_model):
         socketio.emit('progress_estimate', {'current': i[0] + 1, 'total': i[1]})
 
 @app.route('/strategy', methods=['POST'])

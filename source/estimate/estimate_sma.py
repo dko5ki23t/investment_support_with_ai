@@ -101,7 +101,7 @@ def estimate(stock_df: pl.DataFrame, out_file: str, *discard):
     with open(out_file, 'w') as f:
         json.dump(output, f, indent=2)
 
-def estimate_gen(input='', output='', stock_info_file='', filter_market_code=0):
+def estimate_gen(input='', output='', stock_info_file='', filter_market_code=0, force_build_model=False):
     """
     【ジェネレータ】SMA（単純移動平均）による推定を行う
 

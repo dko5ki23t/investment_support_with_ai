@@ -25,6 +25,10 @@ def d_to_str(d: datetime.datetime):
 def str_to_d(s: str):
     return datetime.datetime.strptime(s, "%Y-%m-%d")
 
+def print_and_log_info(logger, s):
+    print(s)
+    logger.info(s)
+
 class HoldingStock:
     hold_from = ""  # 保持した（買った）日
     volume = 0      # 株数
@@ -44,6 +48,18 @@ def business_day_list(start: str, end: str):
             ret.append(cur_date)
         cur_date = cur_date + datetime.timedelta(days=1)        
     return ret
+
+# 開始日付文字列＋終了日付文字列->日数のdict
+termstr_to_days = {}
+
+# start~endの営業日数を返す
+def business_day_count(start: str, end: str):
+    if start == end:
+        return 0
+    termstr = start + end
+    if termstr not in termstr_to_days:
+        termstr_to_days[termstr] = len(business_day_list(start, end)) - 1
+    return termstr_to_days[termstr]
 
 # 日付文字列->独自の数字（ソート用）
 def date_to_num(date: str):
@@ -104,9 +120,9 @@ class OrdersDB:
         date_list = []
         due_list = []
         s_idx = bisect.bisect_left(self.date_sorted_list, date_to_num(start))
-        e_idx = bisect.bisect_left(self.date_sorted_list, date_to_num(date))
+        e_idx = bisect.bisect_right(self.date_sorted_list, date_to_num(date))   # こっちをrightにすることで、仮にe_idxが0＝範囲外の場合には次のループで何も処理しなくなる
         # start~dateの日付を注文日とする注文を返す
-        for date_num in self.date_sorted_list[s_idx:e_idx+1]:
+        for date_num in self.date_sorted_list[s_idx:e_idx]:
             date_list = date_list + self.date_to_orders_idx[num_to_date(date_num)]
         # 締切日dictのキーを日付若い順に並べたリストの内、引数の日付を挿入する位置を得る
         s_idx = bisect.bisect_left(self.due_sorted_list, date_to_num(date))
@@ -198,7 +214,7 @@ def buy_stock(code: str, date: str, value: int, volume: int, holding_stocks: lis
     return ret
     
 # 銘柄売却時の処理
-def sell_stock(code: str, date: str, value: int, volume: int, holding_stocks: list, amount: int):
+def sell_stock(code: str, date: str, value: int, volume: int, holding_stocks: list, amount: int, held_days_count: dict):
     ret_amount = amount
     realized = 0
     # 保持している株から削除していく
@@ -213,6 +229,13 @@ def sell_stock(code: str, date: str, value: int, volume: int, holding_stocks: li
         realized = (value - holding_stock.value_avg) * sell_volume
         # 売却した株数を減算
         holding_stock.volume = holding_stock.volume - sell_volume
+        # 購入～売却の日数を取得
+        delta_days = business_day_count(holding_stock.hold_from, date)
+        # 所持していた日数->株数のdictを更新
+        if delta_days in held_days_count:
+            held_days_count[delta_days] = held_days_count[delta_days] + sell_volume
+        else:
+            held_days_count[delta_days] = sell_volume
         # まだ株が残っているなら再度dictに追加
         if holding_stock.volume > 0:
             holding_stocks[code] = holding_stock
@@ -224,7 +247,10 @@ def sell_stock(code: str, date: str, value: int, volume: int, holding_stocks: li
     return {'amount': ret_amount, 'realized': realized}
 
 # 指定された期間、元金でどのような損益結果が得られるかを評価する
-def evaluate(orders_db: OrdersDB, stock_data_dir: str, base: int, gains: int, start: datetime.datetime, end: datetime.datetime):
+def evaluate(orders_db: OrdersDB, stock_data_dir: str, base: int, gains: int, start: datetime.datetime, end: datetime.datetime, held_days_count: dict):
+    '''
+    held_days_count 関数内部で書き換えあり
+    '''
     # 株価データdict(code:DataFrame)
     stock_data = {}
     # 所持している株のdict(code:HoldingStock)
@@ -284,7 +310,7 @@ def evaluate(orders_db: OrdersDB, stock_data_dir: str, base: int, gains: int, st
                 if len(can_sell) > 0:
                     # 安値が売値よりも高いなら安値で売る
                     sell_val = max(can_sell.get_column('Low')[0], order_val)
-                    ret = sell_stock(code, can_sell.get_column("Date")[0], sell_val, order['volume'], holding_stocks, amount)
+                    ret = sell_stock(code, can_sell.get_column("Date")[0], sell_val, order['volume'], holding_stocks, amount, held_days_count)
                     amount = ret['amount']
                     realized_gains_loses = realized_gains_loses + ret['realized']
             # 差分売りの場合
@@ -296,7 +322,7 @@ def evaluate(orders_db: OrdersDB, stock_data_dir: str, base: int, gains: int, st
                     if len(can_sell) > 0:
                         # 安値が売値よりも高いなら安値で売る
                         sell_val = max(can_sell.get_column('Low')[0], goal)
-                        ret = sell_stock(code, can_sell.get_column("Date")[0], sell_val, order['volume'], holding_stocks, amount)
+                        ret = sell_stock(code, can_sell.get_column("Date")[0], sell_val, order['volume'], holding_stocks, amount, held_days_count)
                         amount = ret['amount']
                         realized_gains_loses = realized_gains_loses + ret['realized']
         target_date = target_date + datetime.timedelta(days=1)
@@ -305,6 +331,11 @@ def evaluate(orders_db: OrdersDB, stock_data_dir: str, base: int, gains: int, st
         # TODO: 以下、lenが0になる場合(大晦日等？)にどうするか問題
         if len(stock_data[k].filter(pl.col('Date') == d_to_str(end)).get_column('Close')) > 0:
             v.valuation = (stock_data[k].filter(pl.col('Date') == d_to_str(end)).get_column('Close')[0] - v.value_avg) * v.volume
+        # 売れていない株をdictに計上
+        if -1 in held_days_count:
+            held_days_count[-1] = held_days_count[-1] + v.volume
+        else:
+            held_days_count[-1] = v.volume
     return {"holding_stocks": holding_stocks, "realized": realized_gains_loses}
     '''
     print("-----最終結果-----")
@@ -321,6 +352,7 @@ def evaluate(orders_db: OrdersDB, stock_data_dir: str, base: int, gains: int, st
     '''
 
 def evaluate_gen(input: str, stock_data_dir='', start='2016-01-01', period=20, base=1000000, gains=100000):
+    print(f'evaluate_gen(input: {input}, stock_data_dir: {stock_data_dir}, start: {start}, period: {period}, base: {base}, gains: {gains})')
     # 売買指示データ読み込み
     try:
         with open(input) as f:
@@ -343,6 +375,7 @@ def evaluate_gen(input: str, stock_data_dir='', start='2016-01-01', period=20, b
     success_num2 = 0    # 目標利益に達した数（実現損益＋評価損益）
     realized_list = []  # 実現損益リスト
     realize_valuation_list = [] # 実現損益＋評価損益リスト
+    held_days_count = {}   # 売却成功株のうち、所持していた日数->株数のdict ただし、-1がキーの値は売れなかった株数を表す
     for index in tqdm.tqdm(range(total_period)):
         valuation = 0
         start_and_end = start_ends[index]
@@ -351,7 +384,8 @@ def evaluate_gen(input: str, stock_data_dir='', start='2016-01-01', period=20, b
         rets = evaluate(
             orders_db, stock_data_dir_internal, base, gains,
             start_and_end[0],
-            start_and_end[1]
+            start_and_end[1],
+            held_days_count,
         )
         holding_stocks = rets["holding_stocks"]
         if holding_stocks is not None:
@@ -378,16 +412,84 @@ def evaluate_gen(input: str, stock_data_dir='', start='2016-01-01', period=20, b
     goal_df = goal_df.with_columns(pl.lit(gains).cast(pl.Float64).alias('Realized'), pl.lit('目標損益').alias('Name'))
     # 連結
     fig_df = pl.concat([fig_df, fig_df2, goal_df])
-    fig = px.line(x=fig_df['Date'], y=fig_df['Realized'], labels={'x': '期間終了日', 'y': '実現損益(円)'}, color=fig_df['Name'])
+    # 折れ線グラフ作成
+    fig = px.line(
+        x=fig_df['Date'],
+        y=fig_df['Realized'],
+        labels={'x': '期間終了日', 'y': '実現損益(円)'},
+        color=fig_df['Name'],
+        title=f'損益額シミュレーション結果(元金：{base} 期間：{period}日)',
+    )
+    # 凡例の位置変更、説明追加のための余白設定
+    fig.update_layout(
+        legend=dict(
+            xanchor='left',
+            yanchor='bottom',
+            x=0.02,
+            y=0.9,
+            orientation='h',),
+        margin=dict(l=20, r=20, t=40, b=120),
+    )
+    # 各種統計値
+    stats = dict(
+        achv_rate=(success_num / total_period) * 100,
+        success=success_num,
+        total=total_period,
+        mean=statistics.mean(realized_list),
+        max=max(realized_list),
+        min=min(realized_list),
+        median=statistics.median(realized_list),
+    )
+    stats2 = dict(
+        achv_rate=(success_num2 / total_period) * 100,
+        success=success_num2,
+        total=total_period,
+        mean=statistics.mean(realize_valuation_list),
+        max=max(realize_valuation_list),
+        min=min(realize_valuation_list),
+        median=statistics.median(realize_valuation_list),
+    )
+    # 統計値表示文字列
+    stats_str = f'目標達成率：{stats["achv_rate"]}% ({stats["success"]}/{stats["total"]})'
+    stats_str2 = f'平均：{stats["mean"]} 最大：{stats["max"]} 最小：{stats["min"]} 中央：{stats["median"]}'
+    stats2_str = f'目標達成率（実現損益＋評価損益）：{stats2["achv_rate"]}% ({stats2["success"]}/{stats2["total"]})'
+    stats2_str2 = f'平均：{stats2["mean"]} 最大：{stats2["max"]} 最小：{stats2["min"]} 中央：{stats2["median"]}'
+    # 統計値をグラフ外に出力
+    fig.add_annotation(dict(
+        x=0,
+        y=-0.20,
+        showarrow=False,
+        text=f'{stats_str}<br>{stats_str2}<br>{stats2_str}<br>{stats2_str2}',
+        textangle=0,
+        xanchor='left',
+        xref="paper",
+        yref="paper"
+    ))
+    # グラフ出力
     fig.show()
-    print(f'目標達成率：{(success_num / total_period) * 100}% ({success_num}/{total_period})')
-    logger.info(f'目標達成率：{(success_num / total_period) * 100}% ({success_num}/{total_period})')
-    print(f'平均：{statistics.mean(realized_list)} 最大：{max(realized_list)} 最小：{min(realized_list)} 中央：{statistics.median(realized_list)}')
-    logger.info(f'平均：{statistics.mean(realized_list)} 最大：{max(realized_list)} 最小：{min(realized_list)} 中央：{statistics.median(realized_list)}')
-    print(f'目標達成率（実現損益＋評価損益）：{(success_num2 / total_period) * 100}% ({success_num2}/{total_period})')
-    logger.info(f'目標達成率（実現損益＋評価損益）：{(success_num2 / total_period) * 100}% ({success_num2}/{total_period})')
-    print(f'平均：{statistics.mean(realize_valuation_list)} 最大：{max(realize_valuation_list)} 最小：{min(realize_valuation_list)} 中央：{statistics.median(realize_valuation_list)}')
-    logger.info(f'平均：{statistics.mean(realize_valuation_list)} 最大：{max(realize_valuation_list)} 最小：{min(realize_valuation_list)} 中央：{statistics.median(realize_valuation_list)}')
+    # 標準出力＋ログ出力
+    print_and_log_info(logger, stats_str)
+    print_and_log_info(logger, stats_str2)
+    print_and_log_info(logger, stats2_str)
+    print_and_log_info(logger, stats2_str2)
+
+    # 売却できた株のうち、売却までに要した日数とその株数の内訳を円グラフとして作成
+    not_sold_count = held_days_count.pop(-1)
+    fig_df = pl.from_dict({'売却までの日数': list(held_days_count.keys()), '株数': list(held_days_count.values())})
+    fig_df = fig_df.sort('売却までの日数')
+    fig_df = fig_df.cast({'売却までの日数': pl.String})
+    fig_df2 = pl.from_dict({'売却までの日数': ['売れず'], '株数': [not_sold_count]})
+    fig_df = pl.concat([fig_df, fig_df2])
+    # 円グラフ作成
+    fig = px.pie(
+        values=fig_df['株数'],
+        names=fig_df['売却までの日数'],
+        title='売却までの各日数と株数の関係',
+    )
+    fig.update_traces(sort=False, selector=dict(type='pie'))
+    # グラフ出力
+    fig.show()
+
     yield [total_period, total_period+1]
 
 def set_argparse():

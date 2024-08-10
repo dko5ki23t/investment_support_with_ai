@@ -9,11 +9,11 @@ import yfinance as yf
 from datetime import datetime
 
 # 自作ロガー追加
-#import sys
-#import os
-#sys.path.append(os.path.join(os.path.dirname(__file__), '../logger'))
-#from logger import Logger
-#logger = Logger(__name__, 'fetch_data.log')
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '../../logger'))
+from logger import Logger
+logger = Logger(__name__, 'fetch_data_yfinance.log')
 
 input_file_default = os.path.join(os.path.dirname(__file__), '../../db/stock_info.csv')
 out_dir_default = os.path.join(os.path.dirname(__file__), '../../db/stock_data')
@@ -21,15 +21,15 @@ out_dir_default = os.path.join(os.path.dirname(__file__), '../../db/stock_data')
 
 # 株価データを取得
 def get_stock_data(code: str, date_from: str, date_to: str):
-    end = date_to
-    if end == '':
-        end = datetime.today().strftime("%Y-%m-%d")
+    start = None
+    if date_from != '':
+        start = date_from
+    end = None
+    if date_to != '':
+        end = date_to
     # リクエスト送信
     try:
-        if date_from != '':
-            r = yf.download(code, start=date_from, end=end)
-        else:
-            r = yf.download(code)
+        r = yf.download(code, start=start, end=end)
     except:
         print('株価データ取得リクエスト中にエラーが発生しました')
     
@@ -58,8 +58,10 @@ def get_stock_df(code: str, file_path: str):
             # Code列追加
             ret = ret.with_columns(pl.lit(code).alias("Code"))
             stock_df = pl.concat([stock_df_removed, ret])
-            ## 株価データをファイルに書き込み
+            # 株価データをファイルに書き込み
             stock_df.write_parquet(file_path)
+            # 取得したデータの最新日をログに出力
+            logger.info(f'[{code}]データ最新日：{stock_df.get_column("Date")[-1]}')
         except Exception as e:
             print(f'株価データ取得に失敗しました（株コード：{code}）')
     else:        # 存在しないので、全取得
@@ -72,6 +74,8 @@ def get_stock_df(code: str, file_path: str):
             stock_df = stock_df.with_columns(pl.lit(code).alias("Code"))
             # 株価データをファイルに書き込み
             stock_df.write_parquet(file_path)
+            # 取得したデータの最新日をログに出力
+            logger.info(f'[{code}]データ最新日：{stock_df.get_column("Date")[-1]}')
         except Exception as e:
             print(f'株価データ取得に失敗しました（株コード：{code}）')
     return stock_df
