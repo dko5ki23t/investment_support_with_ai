@@ -49,6 +49,12 @@ def version():
     """
     return '1.0'
 
+def description():
+    """
+    説明
+    """
+    return 'LSTMによる推定を行う。一定期間(window_size日数分)の終値をもとに、次の日の（高値 - 始値）を推定する。与えられたデータの後半20%を用いて推定値を出し、評価値も出す。'
+
 # 次の営業日を返す
 def next_business_day(date: str):
     cur_date = datetime.datetime.strptime(date, "%Y-%m-%d")

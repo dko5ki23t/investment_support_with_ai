@@ -11,6 +11,7 @@ import tqdm
 import bisect
 import statistics
 import plotly.express as px
+from pathlib import Path
 
 # 自作ロガー追加
 sys.path.append(os.path.join(os.path.dirname(__file__), '../logger'))
@@ -18,6 +19,7 @@ from logger import Logger
 logger = Logger(__name__, 'evaluate.log')
 
 stock_data_dir_default = os.path.join(os.path.dirname(__file__), '../../db/stock_data')
+result_dir = os.path.join(os.path.dirname(__file__), '../../db/evaluate')
 
 def d_to_str(d: datetime.datetime):
     return datetime.datetime.strftime(d, "%Y-%m-%d")
@@ -176,7 +178,7 @@ def get_period_rolling(start: str, end: str, period: int):
 # 銘柄購入時の処理
 def buy_stock(code: str, date: str, value: int, volume: int, holding_stocks: list, amount: int):
     '''
-    volume 負数あり
+    volume 負数あり。負数の場合、買える量/volumeの絶対値 分だけ買う
     '''
     ret = amount
     # 購入できる最大株数
@@ -266,6 +268,7 @@ def evaluate(orders_db: OrdersDB, stock_data_dir: str, base: int, gains: int, st
     while target_date <= end:
         # 対象日に有効な注文のリスト取得
         target_orders = orders_db.get_order_from_period(d_to_str(start), d_to_str(target_date))
+        today_first_amount = copy.copy(amount)
         # 各売買指示を処理
         for order in target_orders:
             # 対象銘柄を読み込み済みかどうか
@@ -296,7 +299,15 @@ def evaluate(orders_db: OrdersDB, stock_data_dir: str, base: int, gains: int, st
                 if len(can_buy) > 0:
                     # 高値が買値よりも低いなら高値で買う
                     buy_val = min(can_buy.get_column('High')[0], order_val)
-                    amount = buy_stock(code, can_buy.get_column('Date')[0], buy_val, order['volume'], holding_stocks, amount)
+                    tmp_amount = copy.copy(amount)
+                    # 買える分だけ買うという指示の場合
+                    if order['volume'] < 0:
+                        # 今日の所持金をもとに、株を買う時に使える限度額を決める
+                        tmp_amount = today_first_amount / abs(order['volume'])
+                        if amount >= tmp_amount:
+                            amount = -tmp_amount + buy_stock(code, can_buy.get_column('Date')[0], buy_val, order['volume'], holding_stocks, tmp_amount)
+                    else:
+                        amount = buy_stock(code, can_buy.get_column('Date')[0], buy_val, order['volume'], holding_stocks, amount)
             # 始値買いの場合
             elif order['type'] == 'buy-open':
                 if len(target_term_df) > 0:
@@ -325,6 +336,27 @@ def evaluate(orders_db: OrdersDB, stock_data_dir: str, base: int, gains: int, st
                         ret = sell_stock(code, can_sell.get_column("Date")[0], sell_val, order['volume'], holding_stocks, amount, held_days_count)
                         amount = ret['amount']
                         realized_gains_loses = realized_gains_loses + ret['realized']
+            # 差分売りかつ締切日で売る場合
+            elif order['type'] == 'sell-delta-last':
+                if code in holding_stocks:
+                    goal = holding_stocks[code].value_avg + order_val
+                    can_sell = target_term_df.filter(pl.col('High') >= goal)
+                    # 期間中に保有株の平均取得値＋差分以上の値段になっているなら
+                    if len(can_sell) > 0:
+                        # 安値が売値よりも高いなら安値で売る
+                        sell_val = max(can_sell.get_column('Low')[0], goal)
+                        ret = sell_stock(code, can_sell.get_column("Date")[0], sell_val, order['volume'], holding_stocks, amount, held_days_count)
+                        amount = ret['amount']
+                        realized_gains_loses = realized_gains_loses + ret['realized']
+                    due_date = str_to_d(order['due'])
+                    if 'due2' in order and due_date < target_date:
+                        due_date = str_to_d(order['due2'])
+                    # 締切日の場合
+                    elif due_date == target_date:
+                        if len(target_term_df) > 0:
+                            ret = sell_stock(code, d_to_str(target_date), target_term_df.get_column('Close')[0], order['volume'], holding_stocks, amount, held_days_count)
+                            amount = ret['amount']
+                            realized_gains_loses = realized_gains_loses + ret['realized']
         target_date = target_date + datetime.timedelta(days=1)
     # 評価損益計算
     for k, v in holding_stocks.items():
@@ -467,6 +499,12 @@ def evaluate_gen(input: str, stock_data_dir='', start='2016-01-01', period=20, b
     ))
     # グラフ出力
     fig.show()
+    # グラフ保存
+    # 保存先ディレクトリがない場合は作成
+    dir = Path(os.path.join(result_dir, f'{orders["name"]}_s{start}_p{period}_b{base}_g{gains}'))
+    dir.mkdir(parents=True, exist_ok=True)
+    out_file = os.path.join(dir, 'graph.html')
+    fig.write_html(out_file)
     # 標準出力＋ログ出力
     print_and_log_info(logger, stats_str)
     print_and_log_info(logger, stats_str2)

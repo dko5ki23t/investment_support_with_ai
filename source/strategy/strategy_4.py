@@ -29,6 +29,12 @@ def version():
     """
     return '1.0'
 
+def description():
+    """
+    説明
+    """
+    return '各日予想に対するスコアが最大の銘柄1種を始値で買って予想利益分の8割の差が出たら売る戦略で注文作成'
+
 def strategy_gen(input: str, output='', base=1000000, stock_info_file='', filter_market_code=0, method_name=''):
     """
     【ジェネレータ】各日予想に対するスコアが最大の銘柄1種を始値で買って予想利益分の8割の差が出たら売る戦略で注文作成

@@ -46,6 +46,12 @@ def version():
     """
     return '1.0'
 
+def description():
+    """
+    説明
+    """
+    return 'LSTMによる推定を行う。一定期間(window_size日数分)の終値をもとに、次の日の終値を推定する。与えられたデータの後半20%を用いて推定値を出し、評価値も出す。'
+
 # 次の営業日を返す
 def next_business_day(date: str):
     cur_date = datetime.datetime.strptime(date, "%Y-%m-%d")
@@ -116,7 +122,8 @@ def estimate(stock_df: pl.DataFrame, out_file: str, model_file='', window_size=1
     # RMSE(二乗平均平方根誤差、0に近いほど良い)
     rmse = np.sqrt(np.mean((predictions - y_test) ** 2))
     logger.info(f'[{code}]RMSE:{rmse}')
-    rmse2 = np.sqrt(np.mean((scaled_predictions - scaled_y_test) ** 2))
+    # rmse2 = np.sqrt(np.mean((scaled_predictions - scaled_y_test) ** 2))
+    rmse2 = rmse / (y_test.max() - y_test.min())
     logger.info(f'[{code}]RMSE2:{rmse2}')
 
     # 評価用ではなく、与えられたデータにない次の日の推測値を出す
@@ -156,7 +163,8 @@ def estimate(stock_df: pl.DataFrame, out_file: str, model_file='', window_size=1
             if i > 0:
                 s = max(i-20, 0)
                 rmse3 = np.sqrt(np.mean((predictions[s:i] - y_test[s:i]) ** 2))
-                rmse4 = np.sqrt(np.mean((scaled_predictions[s:i] - scaled_y_test[s:i]) ** 2))
+                # rmse4 = np.sqrt(np.mean((scaled_predictions[s:i] - scaled_y_test[s:i]) ** 2))
+                rmse4 = rmse3 / (y_test[s:i].max() - y_test[s:i].min())
             out_list.append({
                 "date": row[0], "code": code, "gains": row[1] - prev_close,
                 "score": -rmse, "score2": -rmse2, "score3": -rmse3,

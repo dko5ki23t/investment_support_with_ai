@@ -40,9 +40,10 @@ def get_stock_data(code: str, date_from: str, date_to: str):
 def get_stock_df(code: str, file_path: str):
     # 5桁コード->ティッカーに
     ticker = code
-    if len(ticker) > 4 and ticker[4] == '0':
-        ticker = ticker[:4]
-    ticker = ticker + '.T'
+    if ticker[0] != '^':
+        if len(ticker) > 4 and ticker[4] == '0':
+            ticker = ticker[:4]
+        ticker = ticker + '.T'
     stock_df = pl.DataFrame
     # 既に株価データファイルが存在するか確認
     if os.path.exists(file_path):     # 存在するので、差分のみ取得
@@ -97,21 +98,13 @@ def fetch_data(input: str, output: str, codes: list):
     dir.mkdir(parents=True, exist_ok=True)
     # 取得開始時刻
     time_begin = time.perf_counter()
-    '''
-    # 日経平均株価取得
-    print('(1/2)fetch Nikkei225 data...')
-    code = 'N225'
-    code_real = '^N225'
-    name = '日経平均株価'
-    file = args.out_dir + '/N225.pkl'
-    stock_df = build_stock_df(code, code_real, name, file)
-    stock_df.to_pickle(file)
-    print('done')
-    '''
     
     # 各銘柄の株価データ取得
     print('各銘柄の株価データを取得しています・・・')
     if codes is None or len(codes) == 0:
+        code = '^N225'
+        file_path = out_dir + '/N225.parquet'
+        stock_df = get_stock_df(code, file_path)
         for index in tqdm.tqdm(range(len(df))):
             code = df.get_column('Code')[index]
             file_path = out_dir + '/' + code + '.parquet'
@@ -167,6 +160,10 @@ def fetch_data_gen(input: str, output: str, codes: list):
     # 各銘柄の株価データ取得
     print('各銘柄の株価データを取得しています・・・')
     if codes is None or len(codes) == 0:
+        code = '^N225'
+        file_path = out_dir + '/N225/N225.parquet'
+        stock_df = get_stock_df(code, file_path)
+        yield [0, len(df)]
         for index in tqdm.tqdm(range(len(df))):
             code = df.get_column('Code')[index]
             file_path = out_dir + '/' + code + '.parquet'

@@ -33,6 +33,12 @@ def version():
     """
     return '1.0'
 
+def description():
+    """
+    説明
+    """
+    return 'SMA（単純移動平均）による推定を行う'
+
 # 次の営業日を返す
 def next_business_day(date: str):
     cur_date = datetime.datetime.strptime(date, "%Y-%m-%d")

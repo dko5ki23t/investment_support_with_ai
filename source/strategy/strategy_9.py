@@ -17,7 +17,7 @@ import jpholiday
 #logger = Logger(__name__, 'analyze.log')
 
 stock_info_file_default = os.path.join(os.path.dirname(__file__), '../../db/stock_info.csv')
-out_order_directory_default = os.path.join(os.path.dirname(__file__), '../../db/orders/order_5')
+out_order_directory_default = os.path.join(os.path.dirname(__file__), '../../db/orders/order_9')
 
 # x営業日後を返す
 def next_business_day(date: str, days=1):
@@ -34,7 +34,7 @@ def name():
     """
     戦略の名前
     """
-    return 'strategy5'
+    return 'strategy9'
 
 def version():
     """
@@ -46,11 +46,11 @@ def description():
     """
     説明
     """
-    return '各日予想に対するスコアが最大の銘柄1種を始値で買って予想利益分の8割の差が出たら売る戦略で注文作成'
+    return '各日予想に対するスコア(直近20日間のRSMEを想定したもの)が最大の銘柄1種を始値で買って予想利益分の8割の差が出たら売る戦略で注文作成'
 
 def strategy_gen(input: str, output='', base=1000000, stock_info_file='', filter_market_code=0, method_name=''):
     """
-    【ジェネレータ】各日予想に対するスコアが最大の銘柄1種を始値で買って予想利益分の8割の差が出たら売る戦略で注文作成
+    【ジェネレータ】各日予想に対するスコア(直近20日間のRSMEを想定したもの)が最大の銘柄1種を始値で買って予想利益分の8割の差が出たら売る戦略で注文作成
 
     input : str, default=''
             予想データが保存されたファイルまたはディレクトリ
@@ -141,15 +141,15 @@ def strategy_gen(input: str, output='', base=1000000, stock_info_file='', filter
         }
         orders.append(order)
         # 買値との差がgainsの8割を超えたら売る
-        # 5営業日を超えても売れていない場合はgainsの0.5倍で売る
+        # 5営業日を超えても売れていない場合はgains=0で売る
         order = {
             "date": estimate['date'],
-            "due": next_business_day(estimate['date'], 5),
-            "due2": "max",
+            "due": next_business_day(estimate['date'], 2),
+            "due2": next_business_day(estimate['date'], 10),
             "code": estimate['code'],
-            "type": "sell-delta",
+            "type": "sell-delta-last",
             "value": math.floor(estimate['gains'] * 0.8),
-            "value2": math.floor(estimate['gains'] * 0.5),
+            "value2": 0,
             "volume": -1    # 保持している分全て売る
         }
         orders.append(order)

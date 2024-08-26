@@ -50,6 +50,12 @@ def version():
     """
     return '1.0'
 
+def description():
+    """
+    説明
+    """
+    return 'LSTMによる推定を行う。一定期間(window_size日数分)の終値と出来高をもとに、次の日の（高値 - 始値）を推定する。与えられたデータの後半20%を用いて推定値を出し、評価値も出す。'
+
 # 次の営業日を返す
 def next_business_day(date: str):
     cur_date = datetime.datetime.strptime(date, "%Y-%m-%d")
@@ -126,8 +132,14 @@ def estimate(stock_df: pl.DataFrame, out_file: str, model_file='', window_size=1
     # RMSE(二乗平均平方根誤差、0に近いほど良い)
     rmse = np.sqrt(np.mean((predictions - y_test) ** 2))
     logger.info(f'[{code}]RMSE:{rmse}')
-    rmse2 = np.sqrt(np.mean((scaled_predictions - scaled_y_test) ** 2))
+    # rmse2 = np.sqrt(np.mean((scaled_predictions - scaled_y_test) ** 2))
+    # rmse2 = rmse / (y_test.max() - y_test.min())
+    if np.mean(y_test) == 0:
+        rmse2 = 1
+    else:
+        rmse2 = rmse / np.mean(y_test)
     logger.info(f'[{code}]RMSE2:{rmse2}')
+    rmse13 = np.mean(np.abs(predictions - y_test))
 
     # 評価用ではなく、与えられたデータにない次の日の推測値を出す
     x_predict = [test_data_x[len(test_data_x)-window_size:len(test_data_x), :]]
@@ -163,14 +175,62 @@ def estimate(stock_df: pl.DataFrame, out_file: str, model_file='', window_size=1
             # 過去20日分のRMSE(二乗平均平方根誤差、0に近いほど良い)
             rmse3 = rmse
             rmse4 = rmse2
+            rmse5 = rmse  # 5日
+            rmse6 = rmse2
+            rmse7 = rmse  # 10日
+            rmse8 = rmse2
+            rmse9 = rmse  # 50日
+            rmse10 = rmse2
+            rmse11 = rmse # 100日
+            rmse12 = rmse2
             if i > 0:
                 s = max(i-20, 0)
                 rmse3 = np.sqrt(np.mean((predictions[s:i] - y_test[s:i]) ** 2))
-                rmse4 = np.sqrt(np.mean((scaled_predictions[s:i] - scaled_y_test[s:i]) ** 2))
+                # rmse4 = np.sqrt(np.mean((scaled_predictions[s:i] - scaled_y_test[s:i]) ** 2))
+                # rmse4 = rmse3 / (y_test[s:i].max() - y_test[s:i].min())
+                if np.mean(y_test[s:i]) == 0:
+                    rmse4 = 1
+                else:
+                    rmse4 = rmse3 / np.mean(y_test[s:i])
+                s = max(i-5, 0)
+                rmse5 = np.sqrt(np.mean((predictions[s:i] - y_test[s:i]) ** 2))
+                # rmse6 = np.sqrt(np.mean((scaled_predictions[s:i] - scaled_y_test[s:i]) ** 2))
+                # rmse6 = rmse5 / (y_test[s:i].max() - y_test[s:i].min())
+                if np.mean(y_test[s:i]) == 0:
+                    rmse6 = 1
+                else:
+                    rmse6 = rmse5 / np.mean(y_test[s:i])
+                s = max(i-10, 0)
+                rmse7 = np.sqrt(np.mean((predictions[s:i] - y_test[s:i]) ** 2))
+                # rmse8 = np.sqrt(np.mean((scaled_predictions[s:i] - scaled_y_test[s:i]) ** 2))
+                # rmse8 = rmse7 / (y_test[s:i].max() - y_test[s:i].min())
+                if np.mean(y_test[s:i]) == 0:
+                    rmse8 = 1
+                else:
+                    rmse8 = rmse7 / np.mean(y_test[s:i])
+                s = max(i-50, 0)
+                rmse9 = np.sqrt(np.mean((predictions[s:i] - y_test[s:i]) ** 2))
+                # rmse10 = np.sqrt(np.mean((scaled_predictions[s:i] - scaled_y_test[s:i]) ** 2))
+                # rmse10 = rmse9 / (y_test[s:i].max() - y_test[s:i].min())
+                if np.mean(y_test[s:i]) == 0:
+                    rmse10 = 1
+                else:
+                    rmse10 = rmse9 / np.mean(y_test[s:i])
+                s = max(i-100, 0)
+                rmse11 = np.sqrt(np.mean((predictions[s:i] - y_test[s:i]) ** 2))
+                # rmse12 = np.sqrt(np.mean((scaled_predictions[s:i] - scaled_y_test[s:i]) ** 2))
+                # rmse12 = rmse11 / (y_test[s:i].max() - y_test[s:i].min())
+                if np.mean(y_test[s:i]) == 0:
+                    rmse12 = 1
+                else:
+                    rmse12 = rmse11 / np.mean(y_test[s:i])
             out_list.append({
                 "date": row[0], "code": code, "gains": row[1],
                 "score": -rmse, "score2": -rmse2, "score3": -rmse3,
-                "score4": -rmse4, "yest_close": prev_close
+                "score4": -rmse4, "score5": -rmse5, "score6": -rmse6,
+                "score7": -rmse7, "score8": -rmse8, "score9": -rmse9,
+                "score10": -rmse10, "score11": -rmse11, "score12": -rmse12,
+                "score13": -rmse13, "yest_close": prev_close
             })
         tmp = stock_df.filter(pl.col('Date') == row[0])
         if len(tmp) > 0:

@@ -42,6 +42,12 @@ def version():
     """
     return '1.0'
 
+def description():
+    """
+    説明
+    """
+    return '各日予想に対するスコア(直近20日間のRSMEを想定したもの)が最大の銘柄1種を始値で買って予想利益分の8割の差が出たら売る戦略で注文作成'
+
 def strategy_gen(input: str, output='', base=1000000, stock_info_file='', filter_market_code=0, method_name=''):
     """
     【ジェネレータ】各日予想に対するスコア(直近20日間のRSMEを想定したもの)が最大の銘柄1種を始値で買って予想利益分の8割の差が出たら売る戦略で注文作成
@@ -114,7 +120,7 @@ def strategy_gen(input: str, output='', base=1000000, stock_info_file='', filter
         date = estimate['date']
         score = estimate['score']
         if math.floor(estimate['gains'] * 0.8) > 0 and estimate['yest_close'] * 100 <= base:
-            if date not in date_to_estimate or date_to_estimate[date]['score3'] < score:
+            if date not in date_to_estimate or date_to_estimate[date]['score2'] < score:
                 # 同じ日の注文ならスコアが大きい方のみ残す
                 date_to_estimate[date] = estimate
     print('完了')

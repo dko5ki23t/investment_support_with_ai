@@ -23,29 +23,27 @@ import jpholiday
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '../logger'))
 from logger import Logger
-logger = Logger(__name__, 'model_lstm_5.log')
+logger = Logger(__name__, 'model_lstm_7.log')
 
 # 機械学習の乱数シードを固定
 tf.random.set_seed(1234)
 
 input_directory_default = os.path.join(os.path.dirname(__file__), '../../db/stock_data')
 stock_info_file_default = os.path.join(os.path.dirname(__file__), '../../db/stock_info.csv')
-out_estimate_directory_default = os.path.join(os.path.dirname(__file__), '../../db/estimates/estimate_lstm_5')
-model_file_default = os.path.join(os.path.dirname(__file__), '../../model/model_lstm_5')
+out_estimate_directory_default = os.path.join(os.path.dirname(__file__), '../../db/estimates/estimate_lstm_7')
+model_file_default = os.path.join(os.path.dirname(__file__), '../../model/model_lstm_7')
 
 # データを0-1に正規化するためのツール
 scaler = MinMaxScaler(feature_range=(0, 1))
 scaler2 = MinMaxScaler(feature_range=(0, 1))
 scaler3 = MinMaxScaler(feature_range=(0, 1))
 scaler4 = MinMaxScaler(feature_range=(0, 1))
-scaler5 = MinMaxScaler(feature_range=(0, 1))
-scaler6 = MinMaxScaler(feature_range=(0, 1))
 
 def name():
     """
     推定方法の名前
     """
-    return 'LSTM5'
+    return 'LSTM7'
 
 def version():
     """
@@ -57,7 +55,7 @@ def description():
     """
     説明
     """
-    return 'LSTMによる推定を行う。一定期間(window_size日数分)の始値・終値・低値・高値・出来高をもとに、次の日の（高値 - 始値）を推定する。与えられたデータの後半20%を用いて推定値を出し、評価値も出す。'
+    return 'LSTMによる推定を行う。一定期間(window_size日数分)の終値・出来高と日経平均終値をもとに、次の日の（高値 - 始値）を推定する。与えられたデータの後半20%を用いて推定値を出し、評価値も出す。'
 
 # 次の営業日を返す
 def next_business_day(date: str):
@@ -67,12 +65,13 @@ def next_business_day(date: str):
         if cur_date.weekday() < 5 and not jpholiday.is_holiday(cur_date):
             return datetime.datetime.strftime(cur_date, "%Y-%m-%d")
 
-def estimate(stock_df: pl.DataFrame, out_file: str, model_file='', window_size=128, show_figure=False, *discard):
+def estimate(n225_df: pl.DataFrame, stock_df: pl.DataFrame, out_file: str, model_file='', window_size=128, show_figure=False, *discard):
     """
     LSTMによる推定を行う。
-    一定期間(window_size日数分)の始値・終値・低値・高値・出来高をもとに、次の日の（高値 - 始値）を推定する。
+    一定期間(window_size日数分)の終値・出来高と日経平均終値をもとに、次の日の（高値 - 始値）を推定する。
     与えられたデータの後半20%を用いて推定値を出し、評価値も出す。
 
+    n225_df,
     stock_df : DataFrame
                 推定のもととなる株価データ
                 必要な列 : 'Date', 'Code', 'Open', 'Close', 'Low', 'High', 'Volume'
@@ -92,21 +91,23 @@ def estimate(stock_df: pl.DataFrame, out_file: str, model_file='', window_size=1
     """
 
     code = stock_df.get_column('Code')[0]
-    opens = stock_df['Open'].to_numpy().reshape(-1, 1)
-    closes = stock_df['Close'].to_numpy().reshape(-1, 1)
-    lows = stock_df['Low'].to_numpy().reshape(-1, 1)
-    highs = stock_df['High'].to_numpy().reshape(-1, 1)
-    volumes = stock_df['Volume'].to_numpy().reshape(-1, 1)
+    stock_df_with_n225 = stock_df.join(
+        n225_df.select(pl.col('Date'), pl.col('Close').alias('N225_Close')),
+        on=['Date'],
+        how="left")
+    # 日経平均にはデータがない日もある(null値)ため、その行は削除
+    stock_df_with_n225 = stock_df_with_n225.drop_nulls()
+    closes = stock_df_with_n225['Close'].to_numpy().reshape(-1, 1)
+    volumes = stock_df_with_n225['Volume'].to_numpy().reshape(-1, 1)
+    n225_closes = stock_df_with_n225['N225_Close'].to_numpy().reshape(-1, 1)
     # 高値-始値の差分
-    stock_df_with_delta = stock_df.with_columns((pl.col('High') - pl.col('Open')).alias('Delta'))
+    stock_df_with_delta = stock_df_with_n225.with_columns((pl.col('High') - pl.col('Open')).alias('Delta'))
     deltas = stock_df_with_delta['Delta'].to_numpy().reshape(-1, 1)
     # データを0~1の範囲に正規化
     scaled_values = np.stack([
-        scaler4.fit_transform(opens).flatten(),
         scaler.fit_transform(closes).flatten(),
-        scaler5.fit_transform(lows).flatten(),
-        scaler6.fit_transform(highs).flatten(),
-        scaler3.fit_transform(volumes).flatten()], axis=1)
+        scaler3.fit_transform(volumes).flatten(),
+        scaler4.fit_transform(n225_closes).flatten()], axis=1)
     scaled_deltas = scaler2.fit_transform(deltas)
     # モデル読み込み
     if model_file != '':
@@ -138,7 +139,7 @@ def estimate(stock_df: pl.DataFrame, out_file: str, model_file='', window_size=1
 
     # numpy arrayに変換
     x_test = np.array(x_test)
-    x_test = np.reshape(x_test, (x_test.shape[0], x_test.shape[1], 5))
+    x_test = np.reshape(x_test, (x_test.shape[0], x_test.shape[1], 3))
 
     scaled_predictions = model.predict(x_test)
     predictions = scaler2.inverse_transform(scaled_predictions)
@@ -153,7 +154,7 @@ def estimate(stock_df: pl.DataFrame, out_file: str, model_file='', window_size=1
     x_predict = [test_data_x[len(test_data_x)-window_size:len(test_data_x), :]]
     # numpy arrayに変換
     x_predict = np.array(x_predict)
-    x_predict = np.reshape(x_predict, (x_predict.shape[0], x_predict.shape[1], 5))
+    x_predict = np.reshape(x_predict, (x_predict.shape[0], x_predict.shape[1], 3))
     prediction_newday = model.predict(x_predict)
     prediction_newday = scaler2.inverse_transform(prediction_newday)
     predictions = np.append(predictions, prediction_newday, axis=0)
@@ -175,7 +176,7 @@ def estimate(stock_df: pl.DataFrame, out_file: str, model_file='', window_size=1
 
     # 予想を出力        
     out_list = []
-    prev_close = stock_df.filter(pl.col('Date') == predict.get_column('Date')[0]).get_column('Close')[0]
+    prev_close = stock_df_with_n225.filter(pl.col('Date') == predict.get_column('Date')[0]).get_column('Close')[0]
     # TODO: iter_rows()は非推奨
     i = 0
     for row in predict.iter_rows():
@@ -215,7 +216,7 @@ def estimate(stock_df: pl.DataFrame, out_file: str, model_file='', window_size=1
                 "score10": -rmse10, "score11": -rmse11, "score12": -rmse12,
                 "yest_close": prev_close
             })
-        tmp = stock_df.filter(pl.col('Date') == row[0])
+        tmp = stock_df_with_n225.filter(pl.col('Date') == row[0])
         if len(tmp) > 0:
             prev_close = tmp.get_column('Close')[0]
         i = i + 1
@@ -223,7 +224,7 @@ def estimate(stock_df: pl.DataFrame, out_file: str, model_file='', window_size=1
         "code": code,
         "method_name": name(),
         "version": version(),
-        "last_date": stock_df.get_column('Date')[-1],
+        "last_date": stock_df_with_n225.get_column('Date')[-1],
         "estimate": out_list,
     }
     # ファイル出力
@@ -249,10 +250,10 @@ def build_model(scaled_values: np.ndarray, scaled_deltas: np.ndarray, code: str,
 
     # numpy arrayに変換
     x_train, y_train = np.array(x_train), np.array(y_train)
-    x_train = np.reshape(x_train, (x_train.shape[0], x_train.shape[1], 5))
+    x_train = np.reshape(x_train, (x_train.shape[0], x_train.shape[1], 3))
 
     model = Sequential()
-    model.add(LSTM(units=50,return_sequences=True,input_shape=(x_train.shape[1], 5)))
+    model.add(LSTM(units=50,return_sequences=True,input_shape=(x_train.shape[1], 3)))
     model.add(Dropout(0.25))
     model.add(LSTM(units=50,return_sequences=True))
     model.add(Dropout(0.25))
@@ -274,7 +275,7 @@ def build_model(scaled_values: np.ndarray, scaled_deltas: np.ndarray, code: str,
 
 def estimate_gen(input='', output='', stock_info_file='', filter_market_code=0, force_build_model=False, show_figure=False):
     """
-    【ジェネレータ】LSMAによる推定を行う
+    【ジェネレータ】LSTMによる推定を行う
 
     input : str, default=''
             株価データが保存されたファイルまたはディレクトリ
@@ -316,6 +317,12 @@ def estimate_gen(input='', output='', stock_info_file='', filter_market_code=0, 
 
     # 市場コードでフィルタリング
     filtered_stock_dfs = []
+    # 日経平均のデータフレーム作成
+    try:
+        n225_df = pl.read_parquet(input_directory_default + '/N225/N225.parquet')
+    except:
+        print('日経平均株価データファイルの読み込みに失敗しました')
+        sys.exit(1)
     for data_file in data_files:
         # 株価データ読み込み
         try:
@@ -324,6 +331,8 @@ def estimate_gen(input='', output='', stock_info_file='', filter_market_code=0, 
             print('株価データファイルの読み込みに失敗しました')
             sys.exit(1)
         code = stock_df.get_column('Code')[0]
+        if code[0] == '^':
+            continue
         market_code = stock_info_df.filter(pl.col('Code') == code).get_column('MarketCode')[0]
         if filter_market_code == 0 or market_code == filter_market_code:
             filtered_stock_dfs.append(stock_df)
@@ -344,7 +353,7 @@ def estimate_gen(input='', output='', stock_info_file='', filter_market_code=0, 
         model_file = model_file_default + '_' + code
         if force_build_model:
             model_file = ''
-        estimate(stock_df, out_estimate_file, model_file=model_file, show_figure=show_figure)
+        estimate(n225_df, stock_df, out_estimate_file, model_file=model_file, show_figure=show_figure)
         yield [index, len(filtered_stock_dfs)]
 
 def set_argparse():

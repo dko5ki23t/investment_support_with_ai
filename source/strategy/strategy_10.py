@@ -9,6 +9,7 @@ import polars as pl
 import sys
 import datetime
 import jpholiday
+from operator import itemgetter
 
 # 自作ロガー追加
 #import os
@@ -17,7 +18,7 @@ import jpholiday
 #logger = Logger(__name__, 'analyze.log')
 
 stock_info_file_default = os.path.join(os.path.dirname(__file__), '../../db/stock_info.csv')
-out_order_directory_default = os.path.join(os.path.dirname(__file__), '../../db/orders/order_5')
+out_order_directory_default = os.path.join(os.path.dirname(__file__), '../../db/orders/order_10')
 
 # x営業日後を返す
 def next_business_day(date: str, days=1):
@@ -34,7 +35,7 @@ def name():
     """
     戦略の名前
     """
-    return 'strategy5'
+    return 'strategy10'
 
 def version():
     """
@@ -46,11 +47,11 @@ def description():
     """
     説明
     """
-    return '各日予想に対するスコアが最大の銘柄1種を始値で買って予想利益分の8割の差が出たら売る戦略で注文作成'
+    return '各日予想に対するスコアが最大の銘柄2種を始値で買って予想利益分の8割の差が出たら売る戦略で注文作成'
 
 def strategy_gen(input: str, output='', base=1000000, stock_info_file='', filter_market_code=0, method_name=''):
     """
-    【ジェネレータ】各日予想に対するスコアが最大の銘柄1種を始値で買って予想利益分の8割の差が出たら売る戦略で注文作成
+    【ジェネレータ】各日予想に対するスコアが最大の銘柄2種を始値で買って予想利益分の8割の差が出たら売る戦略で注文作成
 
     input : str, default=''
             予想データが保存されたファイルまたはディレクトリ
@@ -120,39 +121,46 @@ def strategy_gen(input: str, output='', base=1000000, stock_info_file='', filter
         date = estimate['date']
         score = estimate['score']
         if math.floor(estimate['gains'] * 0.8) > 0 and estimate['yest_close'] * 100 <= base:
-            if date not in date_to_estimate or date_to_estimate[date]['score'] < score:
-                # 同じ日の注文ならスコアが大きい方のみ残す
-                date_to_estimate[date] = estimate
+            if date not in date_to_estimate:
+                date_to_estimate[date] = [estimate]
+            elif len(date_to_estimate[date]) < 2:
+                date_to_estimate[date].append(estimate)
+                date_to_estimate[date] = sorted(date_to_estimate[date], key=itemgetter('score'))
+            elif date_to_estimate[date][0]['score'] < score:
+                # 同じ日の注文ならスコアが大きい2つのみ残す
+                date_to_estimate[date][0] = estimate
+                date_to_estimate[date] = sorted(date_to_estimate[date], key=itemgetter('score'))
     print('完了')
     print('注文作成・・・')
     # 注文作成
     # date_to_estimateを時系列でソート
     estimates = sorted(date_to_estimate.items(), key=lambda x: x[0])
     for index in tqdm(range(len(estimates))):
-        estimate = estimates[index][1]
+        estimate_two = estimates[index][1]
         # 始値で買う
-        order = {
-            "date": estimate['date'],
-            "due": estimate['date'],
-            "code": estimate['code'],
-            "type": "buy-open",
-            "value": 0,
-            "volume": -1    # 買えるだけ買う
-        }
-        orders.append(order)
-        # 買値との差がgainsの8割を超えたら売る
-        # 5営業日を超えても売れていない場合はgainsの0.5倍で売る
-        order = {
-            "date": estimate['date'],
-            "due": next_business_day(estimate['date'], 5),
-            "due2": "max",
-            "code": estimate['code'],
-            "type": "sell-delta",
-            "value": math.floor(estimate['gains'] * 0.8),
-            "value2": math.floor(estimate['gains'] * 0.5),
-            "volume": -1    # 保持している分全て売る
-        }
-        orders.append(order)
+        for estimate in estimate_two:
+            order = {
+                "date": estimate['date'],
+                "due": estimate['date'],
+                "code": estimate['code'],
+                "type": "buy-open",
+                "value": 0,
+                "volume": -2    # 買える額の半分だけ買う
+            }
+            orders.append(order)
+            # 買値との差がgainsの8割を超えたら売る
+            # 5営業日を超えても売れていない場合はgainsの0.5倍で売る
+            order = {
+                "date": estimate['date'],
+                "due": next_business_day(estimate['date'], 5),
+                "due2": "max",
+                "code": estimate['code'],
+                "type": "sell-delta",
+                "value": math.floor(estimate['gains'] * 0.8),
+                "value2": math.floor(estimate['gains'] * 0.5),
+                "volume": -1    # 保持している分全て売る
+            }
+            orders.append(order)
         yield [index, len(estimates)+1]
     print('完了')
     print('ファイルへ出力・・・')
